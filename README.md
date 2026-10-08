@@ -14,9 +14,15 @@
 
 ## 给其他 Agent 的一句话用法
 
-> 按 https://github.com/gaogao94/interceptive-ortho-management-index 里的 SKILL.md 给我做一次早矫管理体检，一题一问。
+按 https://github.com/gaogao94/interceptive-ortho-management-index 里的 SKILL.md 给我做一次早矫管理体检：一题一题地问，每题给我选项、不用我打字（分数别给我看），24 题全部答完再出报告。
 
-（这句话可直接粘给 Claude Code、Codex 或任何能读网页/仓库的智能体。它自己会去取 `SKILL.md` 与 `reference/`。）
+（这句话可直接粘给 Claude Code、Codex 或任何能读网页/仓库的智能体，它自己会去取 `SKILL.md` 与 `reference/`。）
+
+句子里那三个限定不是客套，少一个就会走偏：
+
+- **每题给我选项、不用我打字** —— 否则助手可能退化成开放式提问，回答会被组织过；
+- **分数别给我看** —— 看到分数就会去猜哪个分高，答案立刻失真；
+- **24 题全部答完再出报告** —— 缺一题就不出（渲染器会硬拦），说清楚免得答到一半以为够了。
 
 ---
 
