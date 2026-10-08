@@ -527,26 +527,39 @@ def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
 
 
 def header_panel(data: dict) -> str:
-    """报告信息只留三条：机构、规模、访谈日期。
+    """报告信息：机构名当主角，规模与日期退成次级信息。
 
-    不用 kv 组件——它排出来是"标签 + 值"的表格样子（左侧等宽小标签、右侧值），
-    信息少的时候看着多余。直接写三行文字，跟正文一个样式。
+    排版按"层次"来，不是三行等重的文字：
+      左侧一道 3px 竖线定住视觉起点 → 机构名 16px 加粗 →
+      规模两小行 13px 灰 → 日期 12px 更浅灰，与上面隔开。
+
+    两条经验：
+    - 规模那串要**手动拆成两行**（"3 名正畸医生" / "年新接约 180 例"）。
+      不拆的话在这个 260px 宽的栏里会折成"…180 / 例"，孤零零一个"例"字。
+    - 面板占 1 列，990 视口下正好把结论面板放在右边形成"侧栏 + 主栏"。
     """
-    # 三行：机构 / 规模 / 日期 各一行。
-    # 窄栏（990 视口下这个面板约 290px）里"3 名正畸医生 / 年新接约 180 例"会折行，
-    # 但三行各自独立，折了也不串行；把日期并进第二行反而会在宽屏下显得挤。
-    rows = [
-        "机构：" + inline(data["org"]),
-        "规模：" + inline(data["scale"]),
-        "访谈日期：" + inline(data["date"]),
-    ]
-    # 占 1 列：990 视口下正好把结论面板放在右边，形成"侧栏 + 主栏"。
-    # 占满整宽会把结论挤到下一行，那份报告的视觉重心就没了。
-    #
-    # 三行写成 <br> 分隔的整段文字，不用 Markdown 的硬换行（行尾两个空格）：
-    # 硬换行会让每行成为独立段落，窄栏里"规模"那行会被断成两段。
-    body = "<br>".join(rows)
-    return "## 报告信息\n\n" + body + "\n"
+    org = inline(data["org"])
+    scale = one_line(data["scale"])
+    date = inline(data["date"])
+
+    # 把"3 名正畸医生 / 年新接约 180 例"在斜杠处拆开；拆不开就原样一行
+    parts = [p.strip() for p in scale.split("/") if p.strip()]
+    if len(parts) >= 2:
+        scale_html = "<br>".join(parts)
+    else:
+        scale_html = scale
+
+    return (
+        "## 报告信息\n\n"
+        f'<span style="display:block;border-left:3px solid {_C_ACCENT};padding-left:12px">'
+        f'<span style="display:block;font-size:16px;font-weight:700;line-height:1.35">{org}</span>'
+        f'<span style="display:block;font-size:13px;color:{_C_DIM};line-height:1.6;'
+        f'margin-top:4px">{scale_html}</span>'
+        f'<span style="display:block;font-size:12px;color:{_C_DIM};line-height:1.5;'
+        f'margin-top:7px;padding-top:6px;border-top:1px solid {_C_LINE}">'
+        f"访谈 {date}</span>"
+        "</span>\n"
+    )
 
 
 def level_of_score(score: int) -> str:
@@ -974,6 +987,14 @@ _WIDTH_LOCK = (
     # 但内容与阅读顺序不变；要"完全一致"的场合请用导出的 PNG。
     f"@media (max-width: {_LOCK_WIDTH + 40}px) {{"
     f" .am-sheet {{ width: {_LOCK_WIDTH}px; max-width: {_LOCK_WIDTH}px; margin: 0 auto; }} }}"
+    # 同一行的面板不要拉成等高。
+    #
+    # am 的运行时会把 .am-grid 换成 flex 容器，并**写成行内样式**
+    # `display:flex; flex-wrap:wrap; align-items:stretch`。行内样式盖过外部样式表里的
+    # `.am-grid { align-items: start }`，于是同一 flex 行上的面板被拉成一样高：
+    # 报告信息只有三行内容，却被拉伸到跟旁边的结论面板一样高，下面空出 110px。
+    # 行内样式只能靠 !important 压过去，所以这里必须带 !important。
+    f".am-grid > .am-panel, .am-grid > .am-col {{ align-self: start !important; }}"
     f"</style>"
 )
 
