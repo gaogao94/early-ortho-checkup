@@ -526,18 +526,20 @@ def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
 
 
 def header_panel(data: dict) -> str:
+    """报告信息只留三条：机构、规模、访谈日期。
+
+    受访者角色、依据、未覆盖题都删掉了——角色不是判断依据，依据和题量
+    属于方法说明，读者要的是"这是谁、多大、什么时候做的"。"""
     rows = [
         f"机构：{inline(data['org'])}",
         f"规模：{inline(data['scale'])}",
         f"访谈日期：{inline(data['date'])}",
-        f"受访者角色：{inline(data['interviewee'])}",
-        f"依据：{inline(data['evidence'])}",
     ]
     return "## 报告信息\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
 
 
 def level_of_score(score: int) -> str:
-    """按总分反推未封顶时的等级，用来说清"本来是哪一档"。"""
+    """按总分反推未封顶时的等级，用来说清"本来是哪一档"。返回"L2 刚起步"这样的整串。"""
     for lid, low, high, name, _desc in LEVEL_BANDS:
         if low <= score <= high:
             return f"{lid} {name}"
@@ -555,38 +557,33 @@ def headline_panel(data: dict) -> str:
     level_name = one_line(h["level_name"])
     score = int(h["raw_score"])
     hits = [r for r in data["redlines"] if r["verdict"] == "命中"]
-    insufficient = [r for r in data["redlines"] if r["verdict"] == "信息不足"]
 
     out = [
         "## 结论",
         "",
-        # 大字给等级，后面跟总分。读者第一眼要看到的是"我站在哪一档"。
-        # 等级下面不再放 summary：那句话在下面的面板里都有，重复一遍只是占高度。
-        big(level, 64) + "&nbsp;&nbsp;" + big(level_name, 26, _C_DIM)
-        + "&nbsp;&nbsp;" + small(f"{score} 分", 20),
+        # 视觉重心就在这一行：等级越大越好，总分跟在其后。
+        # 这是全报告唯一放大字的地方，读者第一眼必须落在"我站在哪一档"。
+        big(level, 92)
+        + "&nbsp;&nbsp;&nbsp;"
+        + big(level_name, 42, _C_INK)
+        + "&nbsp;&nbsp;&nbsp;"
+        + small(f"{score} 分", 26),
         "",
     ]
 
-    # 红线与等级的关系必须说人话：读者既不知道"红线"指什么，也不知道它怎么"压"等级。
+    # 红线与等级的关系一句话说完。标题只说发生了什么，不解释"压"是什么意思——
+    # 细节留给正文那一句。
     if hits:
         names = "、".join(one_line(r["name"]) for r in hits)
         out += [
-            f"```callout err 这 {len(hits)} 项问题把等级拉低了",
-            f"按总分数本来能到 {level_of_score(score)} 档。"
-            f"但 {names} 属于一票否决的问题，所以等级只算 {level}。",
+            f"```callout err 命中 {len(hits)} 条红线，等级降低",
+            f"按总分本来能到 {level_of_score(score)} 档。{names} 属于一票否决，等级只算 {level}。",
             "```",
         ]
     else:
         out += [
-            "```callout info 没有一票否决的问题",
-            f"四条硬性检查全部通过，{level} 这个等级是实打实的。",
-            "```",
-        ]
-    if insufficient:
-        out += [
-            "```callout warn 有检查项没问到",
-            "、".join(one_line(r["name"]) for r in insufficient)
-            + " 没问到答案，所以没有算进等级。",
+            "```callout info 四条红线全部通过",
+            f"没有一票否决的问题，{level} 这个等级是实打实的。",
             "```",
         ]
     return "\n".join(out) + "\n"
