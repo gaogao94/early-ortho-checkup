@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -921,6 +922,49 @@ def run_command(argv: list, label: str) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# am 产物的后处理
+# --------------------------------------------------------------------------- #
+
+#: 统一字体：am 的 base CSS 把表头、键值标签、面板角标设成等宽字体，
+#: 中文报告里这些中文标签会显示成外挂字形，整页看起来有两种字体。
+#: 只覆盖 font-family，字号/行高/颜色不动；code/pre/kbd 继续用等宽。
+_FONT_OVERRIDE = (
+    '<style id="eoc-uniform-font">'
+    ".am-md th, .am-kv dt, .am-panel-meta, .am-head-meta b "
+    "{ font-family: var(--font-sans) !important; }"
+    "</style>"
+)
+
+#: am 的页脚署名。印在成品图上像水印，对读报告的人也没有信息量。
+#: 本仓库在 README 与文件头保留了完整署名（am 是 MIT，允许修改）。
+_COLOPHON_RE = re.compile(r'<footer class="am-colophon">[\s\S]*?</footer>')
+
+
+def clean_page(path: Path) -> int:
+    """给 am 产出的页面做两道清理，就地改写。返回改动次数。"""
+    html = path.read_text(encoding="utf-8")
+    original = html
+    changes = 0
+
+    stripped = _COLOPHON_RE.sub("", html)
+    if stripped != html:
+        html = stripped
+        changes += 1
+
+    if 'id="eoc-uniform-font"' not in html:
+        html = (
+            html.replace("</head>", _FONT_OVERRIDE + "</head>", 1)
+            if "</head>" in html
+            else _FONT_OVERRIDE + html
+        )
+        changes += 1
+
+    if html != original:
+        path.write_text(html, encoding="utf-8", newline="\n")
+    return changes
+
+
+# --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
 
@@ -1125,12 +1169,19 @@ def main(argv=None) -> int:
         if not html_path.is_file():
             print(f"✗ am 报告成功但没找到产物：{html_path}", file=sys.stderr)
             return EXIT_RUNTIME
-        print(f"html : {html_path}  ({html_path.stat().st_size} B)")
+        # am 生成的页面要过两道清理，HTML 与 PNG 都基于清理后的版本，
+        # 否则"浏览器里看到的"和"导出图"会不一致。
+        changed = clean_page(html_path)
+        size = html_path.stat().st_size
+        print(f"html : {html_path}  ({size} B)" + (f"  已清理 {changed} 处" if changed else ""))
 
         if args.png is not None:
             png_path = Path(args.png) if args.png else html_path.with_suffix(".png")
             png_path.parent.mkdir(parents=True, exist_ok=True)
             tool = resolve_image_tool(args.image_tool)
+            # 宽高交给 html_to_image.mjs 的默认值（1728 CSS 宽 / 1.5 倍）。
+            # 不要在这里写死 --width：am 的页面在 1100px 以下把 3 列塌成 2 列，
+            # 写小了导出的图就和浏览器里看到的排版不一致。
             code = run_command(
                 [
                     node,
@@ -1138,10 +1189,6 @@ def main(argv=None) -> int:
                     str(html_path),
                     "-o",
                     str(png_path),
-                    "--width",
-                    "1440",
-                    "--scale",
-                    "2",
                 ],
                 label="html_to_image",
             )
