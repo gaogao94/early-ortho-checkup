@@ -307,11 +307,146 @@ def validate_report(data) -> dict:
     return data
 
 
+#: K1–K8 对读者没有意义，页面上写成"指标1–指标8"
+def plain_id(mid: str) -> str:
+    """把契约里的短码翻成读者认得的说法。
+
+    契约层（question-bank / playbook / report.json）继续用 A1、R2、K4、ACT-3，
+    那是编号一致性的基础；但它们不该原样出现在给老板看的页面上。
+    A1 到这一步读作"维度1 第1题"。"""
+    if len(mid) >= 2 and mid[0] in "ABCD" and mid[1:].isdigit():
+        return f"维度{'ABCD'.index(mid[0]) + 1} 第{mid[1:]}题"
+    if len(mid) >= 2 and mid[0] in "RK" and mid[1:].isdigit():
+        return ("红线" if mid[0] == "R" else "指标") + mid[1:]
+    if mid.startswith("ACT-"):
+        return "动作" + mid[4:]
+    return mid
+
+
+def compact_basis(text: str) -> str:
+    """红线依据里的题号也写成 1-2 这种形式，和逐题明细的题号列对齐。"""
+    import re as _re
+
+    return _re.sub(
+        r"\b[ABCD][0-9]{1,2}\b",
+        lambda m: short_id(m.group(0)),
+        text,
+    )
+
+
+def capsule_ids(text: str) -> str:
+    """把一句话里裸写的题号（A1、B4、D2…）逐个换成胶囊。
+
+    报告里常有一句"重点对比题号 A1 A2 A4 A5 B1 B4 B5 D2 D4"，
+    九个短码连在一起就是一片字母噪声。换成胶囊之后能一眼数出几个。"""
+    import re as _re
+
+    def repl(m):
+        return capsule(short_id(m.group(0)))
+
+    return _re.sub(r"\b[ABCD][0-9]{1,2}\b", repl, text)
+
+
+def short_id(qid: str) -> str:
+    """逐题明细的题号列：写成 1-1 这种形式，一眼看出是第几个维度的第几题。"""
+    if len(qid) >= 2 and qid[0] in "ABCD" and qid[1:].isdigit():
+        return f"{'ABCD'.index(qid[0]) + 1}-{qid[1:]}"
+    return qid
+
+
+def plain_ids(text: str) -> str:
+    """把一行里出现的所有短码逐个换成可读说法（用于"涉及题号"这类字段）。"""
+    import re as _re
+
+    def repl(m):
+        return plain_id(m.group(0))
+
+    return _re.sub(r"\b([ABCDR K])([0-9]{1,2})\b|\bACT-([0-9])\b", lambda m: (
+        f"维度{'ABCD'.index(m.group(1)) + 1} 第{m.group(2)}题" if m.group(1) in "ABCD" and m.group(1)
+        else (f"红线{m.group(2)}" if m.group(1) == "R"
+              else (f"指标{m.group(2)}" if m.group(1) == "K"
+                    else f"动作{m.group(3)}"))
+    ), text)
+
+
+def _unused_plain_id(mid: str) -> str:
+    return "指标" + mid[1:] if mid.startswith("K") and mid[1:].isdigit() else mid
+
+
+def plain_name(name: str) -> str:
+    """指标名说人话。
+
+    "计划 vs 实际时长" 不是指标名——读者拿不到"多少"这个量。斜杠也一并去掉：
+    "A / B" 读起来像两个东西，其实是一个指标的两个面，用顿号更自然。
+    按最长匹配优先，避免 "实际时长" 里的 "时长" 先被替换。
+    """
+    fixes = (
+        ("计划 vs 实际时长", "计划疗程与实际疗程差多少"),
+        ("计划 vs 实际", "计划与实际"),
+        ("椅位时长 / 每例次数", "每次占椅位多久、每例来几次"),
+        ("重启率 / 二次治疗率", "重启或二次治疗的比例"),
+        (" / ", "、"),
+    )
+    for old, new in fixes:
+        name = name.replace(old, new)
+    return name
+
+
 def sort_actions(actions: list) -> list:
     """按档位 P0→P1→P2 排；同档保持 report.json 里的数组顺序。"""
     indexed = list(enumerate(actions))
     indexed.sort(key=lambda pair: (TIER_RANK[pair[1]["tier"]], pair[0]))
     return [act for _, act in indexed]
+
+
+# --------------------------------------------------------------------------- #
+# 行内样式（am 允许行内 <span>，实测 style 属性原样保留）
+# --------------------------------------------------------------------------- #
+
+#: 颜色取自 shadcn 主题的 token，深浅色模式都能看清
+_C_INK = "#09090b"
+_C_DIM = "#71717a"
+_C_LINE = "#e4e4e7"
+_C_FILL = "#f4f4f5"
+_C_ACCENT = "#2563eb"
+_C_ERR = "#dc2626"
+_C_WARN = "#d97706"
+_C_OK = "#16a34a"
+
+
+def capsule(text: str, tone: str = "plain") -> str:
+    """把题号、指标号这类短码做成胶囊，别让它混在正文里当普通文字读。"""
+    color = {"plain": _C_DIM, "accent": _C_ACCENT, "err": _C_ERR, "warn": _C_WARN}.get(tone, _C_DIM)
+    body = single_line(text)
+    return (
+        '<span style="display:inline-block;padding:1px 8px;margin:0 2px;'
+        f'border:1px solid {_C_LINE};border-radius:999px;background:{_C_FILL};'
+        f'color:{color};font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
+        f'white-space:nowrap">{body}</span>'
+    )
+
+
+def big(text: str, size: int = 56, color: str = _C_INK) -> str:
+    """视觉重心：等级、维度得分这类要一眼看到的数字。"""
+    return (
+        f'<span style="font-size:{size}px;font-weight:800;letter-spacing:-1px;'
+        f'line-height:1;color:{color}">{single_line(text)}</span>'
+    )
+
+
+def small(text: str, size: int = 13, color: str = _C_DIM) -> str:
+    return f'<span style="font-size:{size}px;color:{color}">{single_line(text)}</span>'
+
+
+def raw_total(data: dict) -> tuple[int, int]:
+    """原始分与满分。六个问题、每题 0–3 分，所以每个维度满分 18，四个维度共 72。"""
+    scored = [a["score"] for a in data["answers"] if a["score"] is not None]
+    full = len(scored) * 3
+    return sum(int(s) for s in scored), full
+
+
+def pct(part: int, whole: int) -> int:
+    return round(part / whole * 100) if whole else 0
 
 
 # --------------------------------------------------------------------------- #
@@ -322,7 +457,10 @@ def sort_actions(actions: list) -> list:
 def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
     headline = data["headline"]
     title = f"{single_line(data['org'])} · 早矫管理体检报告"
-    subtitle = f"{single_line(data['date'])} · {headline['level']} {single_line(headline['level_name'])}"
+    subtitle = (
+        f"{single_line(data['date'])} · {headline['level']} {single_line(headline['level_name'])}"
+        f" · 总分 {int(headline['raw_score'])}/100"
+    )
     # 自定义键只用 ASCII：am 的 frontmatter 解析对非 ASCII 键不友好。
     # style 不写在这里——它已经由 --style 传给 am，写两处只会互相打架。
     lines = [
@@ -348,89 +486,111 @@ def header_panel(data: dict) -> str:
         f"依据：{inline(data['evidence'])}",
         f"未覆盖题：{uncovered_text}",
     ]
-    return "## 报告头\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
-
-
-def level_gauge(current: str, raw: int) -> str:
-    """把 L1–L4 画成一条刻度，当前等级标出来。
-
-    这是报告里唯一需要"一眼看懂处境"的地方：读者先看到自己站在四档里的哪一档，
-    再看细节。所以用表格加状态词，不用抽象图形。
-    """
-    lines = [
-        "| 等级 | 分数区间 | 这个等级的样子 | |",
-        "|---|---|---|---|",
-    ]
-    for lid, low, high, name, desc in LEVEL_BANDS:
-        # 表头那一列留空，标记只写字不写符号，避免在窄栏里被拆成两行
-        here = "ok 你在这里" if lid == current else ""
-        lines.append(f"| **{lid} {name}** | {low}–{high} 分 | {desc} | {here} |")
-    lines.append("")
-    lines.append(f"**总分 {raw}／100，等级 {current}。**")
-    return "\n".join(lines)
+    return "## 报告信息\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
 
 
 def headline_panel(data: dict) -> str:
-    headline = data["headline"]
-    level = one_line(headline["level"])
-    level_name = one_line(headline["level_name"])
-    raw = int(headline["raw_score"])
-    capped = one_line(headline["capped_reason"])
+    """结论面板：全报告唯一的视觉重心。
+
+    等级用大字，总分用小字——读者第一眼要看到的是"我站在哪一档"，
+    不是那个精确到个位的分数。原来的写法把等级和分数塞进同一行，
+    还带一个红框，没有任何东西跳出来当重心。
+    """
+    h = data["headline"]
+    level = one_line(h["level"])
+    level_name = one_line(h["level_name"])
+    capped = one_line(h["capped_reason"])
+    score = int(h["raw_score"])
 
     out = [
         "## 结论",
         "",
-        "```callout info " + level + " " + level_name + " · 总分 " + str(raw) + "／100",
-        one_line(headline["summary"]),
-        "```",
+        # 大字给等级，小字给总分与结论。读者第一眼要看到的是"我站在哪一档"。
+        big(level, 64) + "&nbsp;&nbsp;" + big(level_name, 26, _C_DIM),
+        "",
+        small(f"总分 {score}／100　") + small(one_line(h["summary"])),
+        "",
     ]
+    # 红线与等级的关系必须说清：命中就说压到了哪一档，没命中也要明确说等级没被压，
+    # 否则读者分不清"没命中"和"没检查"。
     if capped:
-        # 提示语本身不承载信息时删掉，直接说事（去 AI 味规则第 5 条）
-        out += ["", "```callout err 红线把等级压住了", capped, "```"]
+        out += ["```callout err 红线把等级压住了", capped, "```"]
+    else:
+        out += [
+            "```callout info 红线没有压等级",
+            f"四条红线一条没碰，{level} 这个等级是实打实的。",
+            "```",
+        ]
     return "\n".join(out) + "\n"
 
 
-def score_panel(data: dict) -> str:
-    headline = data["headline"]
-    level = one_line(headline["level"])
-    raw = int(headline["raw_score"])
-    return (
-        # span=2 比 span=3 更紧凑：独占一行会把页面拉高约 1500px，而 2 列宽
-        # 已经够放四档刻度和维度表（实测表头不会断行）。
-        "## 分数与等级 {span=2}\n\n"
-        + level_gauge(level, raw)
-        + "\n\n"
-        + "### 四个维度各得多少\n\n"
-        + dimensions_table(data)
-    )
-
-
-def dimensions_table(data: dict) -> str:
-    headline = data["headline"]
+def level_gauge(current: str) -> str:
+    """L1–L4 四档列出来，当前档打标记。四个级别的门槛不解释就没人看得懂。"""
     lines = [
-        "| 维度 | 得分 | 这个维度最大的缺口 |",
+        "| 等级 | 百分制区间 | 这个等级的样子 | |",
+        "|---|---|---|---|",
+    ]
+    for lid, low, high, name, desc in LEVEL_BANDS:
+        here = "**你在这里**" if lid == current else ""
+        lines.append(f"| **{lid} {name}** | {low}–{high} | {desc} | {here} |")
+    return "\n".join(lines)
+
+
+def score_panel(data: dict) -> str:
+    """分数与等级：先给四档刻度，再给四张维度得分卡。
+
+    维度得分直接显示 18 分制的原始分。六个问题、每题 0–3 分，满分就是 18，
+    不需要先折算成 100 再平均——折一次再折回来只会让读者怀疑"是不是加权了"。
+    """
+    h = data["headline"]
+    level = one_line(h["level"])
+    score = int(h["raw_score"])
+
+    out = [
+        "## 分数与等级 {span=2}",
+        "",
+        level_gauge(level),
+        "",
+        "### 四个维度各得多少",
+        "",
+        # 维度给 18 分制的原始分：6 道题、每题 0–3 分，满分就是 18。
+        # 总分给百分制：四个维度合计满分 72 分，折合成 100 分制再评级。
+        small("每个维度 6 道题、每题 0–3 分，所以满分 18 分。四个维度合计 72 分，折合成百分制后定级。"),
+        "",
+    ]
+
+    for dim in data["dimensions"]:
+        # dim["score"] 是 0–100 的百分制；六个问题每题满分 3 分，
+        # 所以乘以 0.18 就回到 18 分制的原始分。不显示 0–100 再平均，
+        # 免得读者怀疑是不是又加了一层权重。
+        raw_dim = round(int(dim["score"]) * 0.18)
+        out += [
+            f"**{capsule('维度' + str({'A': 1, 'B': 2, 'C': 3, 'D': 4}.get(dim['id'], dim['id'])))}"
+            f"　{one_line(dim['name'])}**",
+            "",
+            big(str(raw_dim), 40, _C_ACCENT) + small("／18"),
+            "",
+            f"{one_line(dim['gap'])}",
+            "",
+        ]
+    return "\n".join(out) + "\n"
+
+
+def redlines_panel(data: dict) -> str:
+    """四条红线。结论列只写结果词，不能写状态词——am 会把 ok/no/warn 换成徽章。"""
+    lines = [
+        "## 四条红线 {span=2}",
+        "",
+        "| 红线 | 结论 | 依据 |",
         "|---|---|---|",
     ]
-    scores = []
-    for dim in data["dimensions"]:
-        status, label = score_band(dim["score"])
-        scores.append(int(dim["score"]))
+    for red in data["redlines"]:
         lines.append(
-            f"| {cell(dim['id'])} {cell(dim['name'])} "
-            f"| {status} {fmt_score(dim['score'])} {label} "
-            f"| {cell(dim['gap'])} |"
+            f"| {cell(red['name'])} "
+            f"| {cell(red['verdict'])} "
+            f"| {cell(compact_basis(red['basis']))} |"
         )
-    avg = round(sum(scores) / len(scores)) if scores else 0
-    lines.append(
-        f"| **总分** | **{int(headline['raw_score'])}/100**（四个维度的平均是 {avg}） "
-        f"| 总分不因为红线改写 |"
-    )
-    lines += [
-        "",
-        f"> 总分是画像，等级是判断。你现在的等级是 "
-        f"{one_line(headline['level'])} {one_line(headline['level_name'])}。",
-    ]
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def uncovered_panel(data: dict) -> str:
@@ -445,42 +605,28 @@ def uncovered_panel(data: dict) -> str:
     )
 
 
-def redlines_panel(data: dict) -> str:
-    lines = [
-        "## 四条红线 {span=2}",
-        "",
-        "| 红线 | 结论 | 依据（题号 + 受访者原话） |",
-        "|---|---|---|",
-    ]
-    for red in data["redlines"]:
-        status = VERDICT_STATUS[red["verdict"]]
-        lines.append(
-            f"| {cell(red['id'])} {cell(red['name'])} "
-            f"| {status} {cell(red['verdict'])} "
-            f"| {cell(red['basis'])} |"
-        )
-    return "\n".join(lines) + "\n"
-
-
 def answers_panel(data: dict) -> str:
     lines = [
         "## 逐题明细 {span=2}",
         "",
-        "| 题号 | 判分 | 受访者关键原话 | 判分依据 |",
+        "| 题号 | 分数 | 受访者关键原话 | 判分依据 |",
         "|---|---|---|---|",
     ]
     for ans in data["answers"]:
         # score == null：该题被跳过（"未覆盖"）。既不算 0 分也不算满分，
         # 与 SKILL.md「跳过的题不给分、也不进分母」一致。
+        # 同样不放状态词：判分列要显示的是"几分之几"，不是图标。
         if ans["score"] is None:
             lines.append(
-                f"| {cell(ans['id'])} | warn 未覆盖 | {cell(ans['quote'])} | {cell(ans['basis'])} |"
+                f"| {capsule(short_id(ans['id']))} | {small('未覆盖', 13, _C_WARN)} "
+                f"| {cell(ans['quote'])} | {cell(ans['basis'])} |"
             )
             continue
         score = int(ans["score"])
-        status = "ok" if score >= 3 else ("no" if score <= 0 else "warn")
+        color = _C_OK if score >= 3 else (_C_ERR if score <= 0 else _C_WARN)
         lines.append(
-            f"| {cell(ans['id'])} | {status} {score}/3 | {cell(ans['quote'])} | {cell(ans['basis'])} |"
+            f"| {capsule(short_id(ans['id']))} | {small(f'{score}/3', 13, color)} "
+            f"| {cell(ans['quote'])} | {cell(ans['basis'])} |"
         )
     uncovered = [a["id"] for a in data["answers"] if a["score"] is None]
     tail = ""
@@ -491,7 +637,7 @@ def answers_panel(data: dict) -> str:
         )
     lines += [
         "",
-        f"> 共 {len(data['answers'])} 题。✓ 是 3 分，! 是 1–2 分，✗ 是 0 分。{tail}",
+        f"> 共 {len(data['answers'])} 题，每题 0–3 分。{tail}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -529,7 +675,7 @@ def actions_panel(data: dict) -> str:
     # 下一步并进这一节开头：原来它是独立一节，和这里的动作列表说的是同一件事
     steps = data["next_steps"]
     if steps:
-        body = "\n".join(f"{i}. {one_line(s)}" for i, s in enumerate(steps, start=1))
+        body = "\n".join(f"{i}. {capsule_ids(one_line(s))}" for i, s in enumerate(steps, start=1))
         out += ["```callout warn 这周就开始", body, "```", ""]
 
     if actions:
@@ -543,9 +689,16 @@ def actions_panel(data: dict) -> str:
         ]
 
     for i, act in enumerate(actions, start=1):
+        # 涉及题号收成一行小字。审计要能追溯到题，但它是给复核的人看的，
+        # 不该抢在动作本身前面——所以放在标题下面，用最小的字号。
+        ids = one_line(act["gap_ids"]).split()
+        shown = " ".join(capsule(short_id(x)) for x in ids[:8])
+        if len(ids) > 8:
+            shown += small(f" 等 {len(ids)} 题", 12)
         out += [
-            f"### {i}. {one_line(act['id'])} {one_line(act['name'])}"
-            f" · {one_line(act['tier'])} · 缺口题号 {one_line(act['gap_ids'])}",
+            f"### {i}. {one_line(act['name'])}　{capsule(act['id'])}" + capsule(act["tier"], "accent"),
+            "",
+            small("涉及 " + shown, 12),
             "",
             one_line(act["now"]),
             "",
@@ -586,50 +739,21 @@ def metrics_panel(data: dict) -> str:
     ]
     unknown_count = 0
     for metric in data["metrics"]:
+        # 不放 ok / warn：am 会把它们换成 ✓ / ! 徽章，而读者要的是数字本身。
+        value = cell(metric["value"])
         if is_unknown(metric["value"]):
             unknown_count += 1
-            lines.append(
-                f"| {cell(metric['id'])} {cell(metric['name'])} "
-                f"| warn 未知 | {cell(metric['note'])} |"
-            )
-        else:
-            lines.append(
-                f"| {cell(metric['id'])} {cell(metric['name'])} "
-                f"| ok {cell(metric['value'])} | {cell(metric['note'])} |"
-            )
+            value = small("还不知道", 13, _C_WARN)
+        lines.append(
+            f"| {capsule(plain_id(metric['id']))} {cell(plain_name(metric['name']))} "
+            f"| {value} | {cell(metric['note'])} |"
+        )
     total = len(data["metrics"])
     lines += ["", f"> 八个数字里，{total - unknown_count} 个拿到了，{unknown_count} 个还不知道。"]
 
-    def plain(name: str) -> str:
-        """指标名说人话。
-
-        "计划 vs 实际时长" 不是指标名——读者拿不到"多少"这个量。斜杠也一并去掉：
-        "A / B" 读起来像两个东西，其实是一个指标的两个面，用顿号更自然。
-        按最长匹配优先，避免 "实际时长" 里的 "时长" 先被替换。
-        """
-        fixes = (
-            ("计划 vs 实际时长", "计划疗程与实际疗程差多少"),
-            ("计划 vs 实际", "计划与实际"),
-            ("椅位时长 / 每例次数", "每次占椅位多久、每例来几次"),
-            ("重启率 / 二次治疗率", "重启或二次治疗的比例"),
-            (" / ", "、"),
-        )
-        for old, new in fixes:
-            name = name.replace(old, new)
-        return name
-
-    # 指标名在这里统一做一次可读化，避免上游 JSON 里出现看不懂的写法。
-    # 表格拆开后：parts[0]=''、parts[1]=指标名、parts[2]=数值、parts[3]=来源。
-    for i, line in enumerate(lines):
-        if line.startswith("| K"):
-            parts = line.split("|")
-            if len(parts) >= 4:
-                parts[1] = " " + plain(parts[1].strip()) + " "
-                lines[i] = "|".join(parts)
-
     if unknown_count:
         lines.append(
-            "> 每个「未知」都写清了该去哪张报表取数。不估算，也不用行业均值顶替。"
+            "> 每个「还不知道」都写清了该去哪张报表取数。不估算，也不用行业均值顶替。"
         )
     return "\n".join(lines) + "\n"
 
