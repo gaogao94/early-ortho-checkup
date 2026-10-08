@@ -78,15 +78,16 @@ ANSWER_FIELDS = {"id": str, "score": int, "quote": str, "basis": str}
 #: 允许为 null 的字段：被跳过的题（"未覆盖"）没有分数，
 #: 用 null 表示"不计分、也不进分母"，而不是用 0 顶替。
 NULLABLE_FIELDS = {("answers", "score")}
+#: 可选字段：缺了不算错。曾经必填、现在不再显示的也放这里，老 JSON 不用改。
+OPTIONAL_ACTION_FIELDS = {"title", "eta"}
 ACTION_FIELDS = {
     "id": str,
-    "name": str,
+    "name": str,  # 动作的契约名，与 playbook 一致
     "tier": str,
     "gap_ids": str,
     "now": str,
     "todo": list,
     "accept": str,
-    "eta": str,
 }
 ROADMAP_FIELDS = {"weeks": str, "action": str, "deliverable": str, "accept": str}
 METRIC_FIELDS = {"id": str, "name": str, "value": str, "note": str}
@@ -268,7 +269,9 @@ def validate_report(data) -> dict:
             if not isinstance(item, dict):
                 raise InputError(f"{name}[{i}] 必须是对象")
             nullable = tuple(k for (grp, k) in NULLABLE_FIELDS if grp == name)
-            _require(item, fields, f"{name}[{i}]", allow_null=nullable)
+            required = {k: v for k, v in fields.items() if k not in OPTIONAL_ACTION_FIELDS} \
+                if name == "actions" else fields
+            _require(item, required, f"{name}[{i}]", allow_null=nullable)
 
     for i, item in enumerate(data["next_steps"]):
         if not isinstance(item, str):
@@ -324,14 +327,20 @@ def plain_id(mid: str) -> str:
 
 
 def compact_basis(text: str) -> str:
-    """红线依据里的题号也写成 1-2 这种形式，和逐题明细的题号列对齐。"""
+    """依据里出现的题号与红线号也要可读。
+
+    读者的视野里不该出现 R3、K4、A1 这类契约短码——题号写成 A1，
+    红线写成「无周期标准」那条，指标写成「指标4」。
+    """
     import re as _re
 
-    return _re.sub(
-        r"\b[ABCD][0-9]{1,2}\b",
-        lambda m: short_id(m.group(0)),
-        text,
-    )
+    def repl(m):
+        code = m.group(0)
+        if code[0] in "ABCD":
+            return code  # 题号保留 A1 形式：有分类感，读者能看出属于哪个维度
+        return plain_id(code)
+
+    return _re.sub(r"\b[ABCDRK][0-9]{1,2}\b", repl, text)
 
 
 def capsule_ids(text: str) -> str:
@@ -489,90 +498,125 @@ def header_panel(data: dict) -> str:
     return "## 报告信息\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
 
 
+def level_of_score(score: int) -> str:
+    """按总分反推未封顶时的等级，用来说清"本来是哪一档"。"""
+    for lid, low, high, name, _desc in LEVEL_BANDS:
+        if low <= score <= high:
+            return f"{lid} {name}"
+    return "更低一档"
+
+
 def headline_panel(data: dict) -> str:
     """结论面板：全报告唯一的视觉重心。
 
-    等级用大字，总分用小字——读者第一眼要看到的是"我站在哪一档"，
-    不是那个精确到个位的分数。原来的写法把等级和分数塞进同一行，
-    还带一个红框，没有任何东西跳出来当重心。
+    只放大字等级、一句结论、一条红线说明，不放任何解释性文字。
+    "总分 31／100" 这类短句在报告头已经出现过，这里再来一遍只是占高度。
     """
     h = data["headline"]
     level = one_line(h["level"])
     level_name = one_line(h["level_name"])
-    capped = one_line(h["capped_reason"])
     score = int(h["raw_score"])
+    hits = [r for r in data["redlines"] if r["verdict"] == "命中"]
+    insufficient = [r for r in data["redlines"] if r["verdict"] == "信息不足"]
 
     out = [
         "## 结论",
         "",
-        # 大字给等级，小字给总分与结论。读者第一眼要看到的是"我站在哪一档"。
-        big(level, 64) + "&nbsp;&nbsp;" + big(level_name, 26, _C_DIM),
+        # 大字给等级，后面跟总分。读者第一眼要看到的是"我站在哪一档"。
+        big(level, 64) + "&nbsp;&nbsp;" + big(level_name, 26, _C_DIM)
+        + "&nbsp;&nbsp;" + small(f"{score} 分", 20),
         "",
-        small(f"总分 {score}／100　") + small(one_line(h["summary"])),
+        one_line(h["summary"]),
         "",
     ]
-    # 红线与等级的关系必须说清：命中就说压到了哪一档，没命中也要明确说等级没被压，
-    # 否则读者分不清"没命中"和"没检查"。
-    if capped:
-        out += ["```callout err 红线把等级压住了", capped, "```"]
+
+    # 红线与等级的关系必须说人话：读者既不知道"红线"指什么，也不知道它怎么"压"等级。
+    if hits:
+        names = "、".join(one_line(r["name"]) for r in hits)
+        out += [
+            f"```callout err 这 {len(hits)} 项问题把等级拉低了",
+            f"按总分数本来能到 {level_of_score(score)} 档。"
+            f"但 {names} 属于一票否决的问题，所以等级只算 {level}。",
+            "```",
+        ]
     else:
         out += [
-            "```callout info 红线没有压等级",
-            f"四条红线一条没碰，{level} 这个等级是实打实的。",
+            "```callout info 没有一票否决的问题",
+            f"四条硬性检查全部通过，{level} 这个等级是实打实的。",
+            "```",
+        ]
+    if insufficient:
+        out += [
+            "```callout warn 有检查项没问到",
+            "、".join(one_line(r["name"]) for r in insufficient)
+            + " 没问到答案，所以没有算进等级。",
             "```",
         ]
     return "\n".join(out) + "\n"
 
 
-def level_gauge(current: str) -> str:
-    """L1–L4 四档列出来，当前档打标记。四个级别的门槛不解释就没人看得懂。"""
+def level_gauge(current: str, score: int) -> str:
+    """四档刻度。当前档整行加底色，一眼看到自己站在哪。
+
+    不再单列"你在这里"——整行高亮比一个标记更省一列宽度。
+    """
     lines = [
-        "| 等级 | 百分制区间 | 这个等级的样子 | |",
-        "|---|---|---|---|",
+        "| 等级 | 这一档的样子 | 分数段 |",
+        "|---|---|---|",
     ]
+    hl = "background:#eff6ff"
     for lid, low, high, name, desc in LEVEL_BANDS:
-        here = "**你在这里**" if lid == current else ""
-        lines.append(f"| **{lid} {name}** | {low}–{high} | {desc} | {here} |")
+        if lid == current:
+            lines.append(
+                f'| <span style="{hl};display:block;font-weight:800">{lid} {name}</span> '
+                f'| <span style="{hl};display:block">{desc}</span> '
+                f'| <span style="{hl};display:block">{low}–{high}</span> |'
+            )
+        else:
+            lines.append(f"| **{lid} {name}** | {desc} | {low}–{high} |")
     return "\n".join(lines)
 
 
-def score_panel(data: dict) -> str:
-    """分数与等级：先给四档刻度，再给四张维度得分卡。
+def dim_bar(dim: dict) -> str:
+    """一行一个维度：竖杠 + 编号名 + 得分 + 一句话缺口。
 
-    维度得分直接显示 18 分制的原始分。六个问题、每题 0–3 分，满分就是 18，
-    不需要先折算成 100 再平均——折一次再折回来只会让读者怀疑"是不是加权了"。
+    原来得分放大成 40px、缺口另起一行，四个维度就吃掉半屏。现在横排成一行，
+    说明文字跟在分数后面：省高度，也更像一张表。
+    维度名前面用竖杠而不是胶囊——胶囊四五个排在一起像一排按钮，读不出是并列的维度。
+    """
+    order = "ABCD".index(dim["id"]) + 1 if dim["id"] in "ABCD" else dim["id"]
+    raw_dim = round(int(dim["score"]) * 0.18)
+    gap = one_line(dim.get("gap") or dim.get("desc") or "")
+    bar = f"border-left:3px solid {_C_ACCENT};padding-left:10px;display:block;margin:7px 0"
+    head = (
+        f'<span style="display:inline-block;min-width:104px;font-weight:700">'
+        f"维度{order}｜{one_line(dim['name'])}</span>"
+    )
+    tail = (
+        f'<span style="display:inline-block;min-width:34px;font-size:19px;'
+        f'font-weight:800;color:{_C_ACCENT}">{raw_dim}</span>'
+        f'<span style="font-size:12px;color:{_C_DIM}">/18　</span>'
+    )
+    return f'<span style="{bar}">{head}{tail}{gap}</span>'
+
+
+def score_panel(data: dict) -> str:
+    """分数与等级：先给四档刻度，再给四行维度得分。
+
+    维度分显示 18 分制的原始分（6 题 × 每题 0–3 分）。不折成 100 再平均——
+    多一次换算只会让读者怀疑"是不是又加了权重"。
     """
     h = data["headline"]
-    level = one_line(h["level"])
-    score = int(h["raw_score"])
-
     out = [
         "## 分数与等级 {span=2}",
         "",
-        level_gauge(level),
+        level_gauge(one_line(h["level"]), int(h["raw_score"])),
         "",
         "### 四个维度各得多少",
         "",
-        # 维度给 18 分制的原始分：6 道题、每题 0–3 分，满分就是 18。
-        # 总分给百分制：四个维度合计满分 72 分，折合成 100 分制再评级。
-        small("每个维度 6 道题、每题 0–3 分，所以满分 18 分。四个维度合计 72 分，折合成百分制后定级。"),
-        "",
     ]
-
     for dim in data["dimensions"]:
-        # dim["score"] 是 0–100 的百分制；六个问题每题满分 3 分，
-        # 所以乘以 0.18 就回到 18 分制的原始分。不显示 0–100 再平均，
-        # 免得读者怀疑是不是又加了一层权重。
-        raw_dim = round(int(dim["score"]) * 0.18)
-        out += [
-            f"**{capsule('维度' + str({'A': 1, 'B': 2, 'C': 3, 'D': 4}.get(dim['id'], dim['id'])))}"
-            f"　{one_line(dim['name'])}**",
-            "",
-            big(str(raw_dim), 40, _C_ACCENT) + small("／18"),
-            "",
-            f"{one_line(dim['gap'])}",
-            "",
-        ]
+        out += [dim_bar(dim), ""]
     return "\n".join(out) + "\n"
 
 
@@ -624,44 +668,42 @@ def answers_panel(data: dict) -> str:
             continue
         score = int(ans["score"])
         color = _C_OK if score >= 3 else (_C_ERR if score <= 0 else _C_WARN)
+        # 只写"3 分"不写"3/3"：每题都是 0–3 分，满分固定，重复写没有信息量。
         lines.append(
-            f"| {capsule(short_id(ans['id']))} | {small(f'{score}/3', 13, color)} "
+            f"| {capsule(ans['id'])} | {small(f'{score} 分', 13, color)} "
             f"| {cell(ans['quote'])} | {cell(ans['basis'])} |"
         )
     uncovered = [a["id"] for a in data["answers"] if a["score"] is None]
-    tail = ""
     if uncovered:
-        tail = (
-            f"其中 {'、'.join(uncovered)} 未覆盖，既不计 0 分也不计满分，"
-            "该维度的证据强度因此弱一些。"
-        )
-    lines += [
-        "",
-        f"> 共 {len(data['answers'])} 题，每题 0–3 分。{tail}",
-    ]
+        lines += [
+            "",
+            f"> {'、'.join(uncovered)} 未覆盖，既不计 0 分也不计满分，该维度的证据强度弱一些。",
+        ]
     return "\n".join(lines) + "\n"
 
 
 def priority_flow(actions: list) -> str:
     """优先序图。
 
-    两个坑都绕开了：
-    - 节点名直接写文本（`A -> B: label`），不用 `A[x]` 那种方括号写法；
-    - 标签只标**跨档那次跳转**（`A -> B: P1` 读作"从这往后进入 P1"）。
-      同档内相邻的两个动作不标——档位已经由 group 框说清楚了，
-      每条边都标一遍反而看不清哪一步是真正的换挡点。
+    节点名只写序号加短标题：流程图里塞长句子会让每格都折行，
+    而且这一节的标题已经写过同样的字。契约名（ACT-2 结果要核）不出现在图上，
+    那是内部编号，读者不需要看到两套名字。
     """
-    nodes = [f"{one_line(a['id'])} {one_line(a['name'])}" for a in actions]
+    labels = []
+    for i, act in enumerate(actions, start=1):
+        title = one_line(act.get("title") or act["name"])
+        labels.append(f"{i} {title[:14]}")
     lines = []
-    for i in range(len(nodes) - 1):
-        nxt_tier = actions[i + 1]["tier"]
-        if nxt_tier != actions[i]["tier"]:
-            lines.append(f"{nodes[i]} -> {nodes[i + 1]}: {nxt_tier}")
+    for i in range(len(labels) - 1):
+        nxt = actions[i + 1]["tier"]
+        if nxt != actions[i]["tier"]:
+            # 只标跨档那次跳转：同档相邻的都标，就看不出哪一步是真正的换挡点
+            lines.append(f"{labels[i]} -> {labels[i + 1]}: {nxt}")
         else:
-            lines.append(f"{nodes[i]} -> {nodes[i + 1]}")
+            lines.append(f"{labels[i]} -> {labels[i + 1]}")
     seen: dict[str, list[str]] = {}
-    for node, act in zip(nodes, actions):
-        seen.setdefault(act["tier"], []).append(node)
+    for label, act in zip(labels, actions):
+        seen.setdefault(act["tier"], []).append(label)
     for tier in ("P0", "P1", "P2"):
         if tier in seen:
             lines.append(f"group {tier}: " + ", ".join(seen[tier]))
@@ -669,8 +711,14 @@ def priority_flow(actions: list) -> str:
 
 
 def actions_panel(data: dict) -> str:
+    """该做什么。
+
+    每个动作是一个待办，所以标题必须是待办的说法："结束病例要过一遍复核"，
+    不是"结果要核"——后者是名词词组，读不出是要人去做事。
+    标题下面加一条分隔线，六个动作连排时不至于糊成一片。
+    """
     actions = sort_actions(data["actions"])
-    out = ["## 该做什么，按先后排 {span=2}", ""]
+    out = ["## 该做什么 {span=2}", ""]
 
     # 下一步并进这一节开头：原来它是独立一节，和这里的动作列表说的是同一件事
     steps = data["next_steps"]
@@ -684,21 +732,19 @@ def actions_panel(data: dict) -> str:
             priority_flow(actions),
             "```",
             "",
-            f"> 一共 {len(actions)} 个动作。P0 先做，P1 跟上，P2 排在后面。",
+            "---",
             "",
         ]
 
     for i, act in enumerate(actions, start=1):
-        # 涉及题号收成一行小字。审计要能追溯到题，但它是给复核的人看的，
-        # 不该抢在动作本身前面——所以放在标题下面，用最小的字号。
-        ids = one_line(act["gap_ids"]).split()
-        shown = " ".join(capsule(short_id(x)) for x in ids[:8])
-        if len(ids) > 8:
-            shown += small(f" 等 {len(ids)} 题", 12)
+        # 全角空格撑开单元格，否则"得分"这种两字表头会挤在一起
+        if i > 1:
+            out += ["---", ""]
+        title = one_line(act.get("title") or act["name"])
+        # 档位写成"先做/接着做/以后做"，比 P0/P1/P2 好懂；后面留足间距，别贴着标题
+        when = {"P0": "先做", "P1": "接着做", "P2": "以后做"}.get(act["tier"], act["tier"])
         out += [
-            f"### {i}. {one_line(act['name'])}　{capsule(act['id'])}" + capsule(act["tier"], "accent"),
-            "",
-            small("涉及 " + shown, 12),
+            f"### {i}. {title}　　{small(when, 13)}",
             "",
             one_line(act["now"]),
             "",
@@ -706,26 +752,27 @@ def actions_panel(data: dict) -> str:
         if act["todo"]:
             out += [f"{j}. {one_line(step)}" for j, step in enumerate(act["todo"], start=1)]
             out.append("")
-        out += [
-            f"做到这一步算完成。{one_line(act['accept'])}",
-            "",
-            f"预计 {one_line(act['eta'])}。",
-            "",
-        ]
+        out += [f"做到这一步算完成。{one_line(act['accept'])}", ""]
     return "\n".join(out) + "\n"
 
 
 def roadmap_panel(data: dict) -> str:
-    # span=2：四段周次的标题与交付说明在 1/3 宽列里会被压成竖排单字
-    lines = ["## 90 天怎么排 {span=2}", "", "```timeline"]
+    """90 天怎么排用表格，不用 timeline。
+
+    timeline 把每条的时间标题居中、正文塞在下面，四段并排时读者看不出
+    下面那行灰字属于哪一段。表格天然左对齐、逐列对应，不会串行。
+    """
+    lines = [
+        "## 90 天怎么排 {span=2}",
+        "",
+        "| 时间 | 要做什么 | 交付什么 | 怎样算做完 |",
+        "|---|---|---|---|",
+    ]
     for row in data["roadmap"]:
-        weeks = inline(row["weeks"])
-        action = inline(row["action"])
-        deliverable = inline(row["deliverable"])
-        accept = inline(row["accept"])
-        note = f"交付 {deliverable} ｜ 验收 {accept}"
-        lines.append(f"{weeks} | {action} | {note}")
-    lines.append("```")
+        lines.append(
+            f"| {cell(row['weeks'])} | {cell(row['action'])} "
+            f"| {cell(row['deliverable'])} | {cell(row['accept'])} |"
+        )
     return "\n".join(lines) + "\n"
 
 
