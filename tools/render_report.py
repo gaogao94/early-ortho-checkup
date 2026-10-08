@@ -529,14 +529,24 @@ def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
 def header_panel(data: dict) -> str:
     """报告信息只留三条：机构、规模、访谈日期。
 
-    受访者角色、依据、未覆盖题都删掉了——角色不是判断依据，依据和题量
-    属于方法说明，读者要的是"这是谁、多大、什么时候做的"。"""
+    不用 kv 组件——它排出来是"标签 + 值"的表格样子（左侧等宽小标签、右侧值），
+    信息少的时候看着多余。直接写三行文字，跟正文一个样式。
+    """
+    # 三行：机构 / 规模 / 日期 各一行。
+    # 窄栏（990 视口下这个面板约 290px）里"3 名正畸医生 / 年新接约 180 例"会折行，
+    # 但三行各自独立，折了也不串行；把日期并进第二行反而会在宽屏下显得挤。
     rows = [
-        f"机构：{inline(data['org'])}",
-        f"规模：{inline(data['scale'])}",
-        f"访谈日期：{inline(data['date'])}",
+        "机构：" + inline(data["org"]),
+        "规模：" + inline(data["scale"]),
+        "访谈日期：" + inline(data["date"]),
     ]
-    return "## 报告信息\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
+    # 占 1 列：990 视口下正好把结论面板放在右边，形成"侧栏 + 主栏"。
+    # 占满整宽会把结论挤到下一行，那份报告的视觉重心就没了。
+    #
+    # 三行写成 <br> 分隔的整段文字，不用 Markdown 的硬换行（行尾两个空格）：
+    # 硬换行会让每行成为独立段落，窄栏里"规模"那行会被断成两段。
+    body = "<br>".join(rows)
+    return "## 报告信息\n\n" + body + "\n"
 
 
 def level_of_score(score: int) -> str:
@@ -939,9 +949,37 @@ _FONT_OVERRIDE = (
 #: 本仓库在 README 与文件头保留了完整署名（am 是 MIT，允许修改）。
 _COLOPHON_RE = re.compile(r'<footer class="am-colophon">[\s\S]*?</footer>')
 
+#: 锁定页面宽度。
+#:
+#: 报告不是网站，一致性比自适应重要：这份文件会被打开、转发、导出成图，
+#: 三种场景必须看到同一个版式。锁死宽度之后，浏览器里、别人的电脑上、
+#: 导出的 PNG 全都是同一个排版，不会再出现"我这边看是并排、你那边是上下"。
+#:
+#: 990 必须与 html_to_image.mjs 的 --css-width 默认值保持一致，
+#: 否则图与页面又会分叉（那个值是按"图缩到阅读宽度时字号 1:1"定的）。
+_LOCK_WIDTH = 990
+
+_WIDTH_LOCK = (
+    f'<style id="eoc-width-lock">'
+    # 只在"容器宽度与窗口宽度一致"的区间里锁宽。
+    #
+    # am 的运行时有一段列平衡脚本，按 grid 容器的实际宽度重排面板。如果容器被写死
+    # 成 990px 而窗口更宽，两者对不上，平衡脚本会算错：实测 1920 窗口下报告信息被
+    # 压成 1 列、结论被挤到它下面，版面彻底散掉（只写 max-width 也一样会散，因为
+    # 容器仍然是 990 而窗口是 1920）。
+    #
+    # 所以锁宽只覆盖"窄窗"区间：窗口不超过 {_LOCK_WIDTH + 40}px 时，把 sheet 钉在
+    # 990px 居中 —— 这正是出图与阅读的宽度。窗口更宽时撤掉约束，让 am 按它自己的
+    # 算法正常排三栏，避免版面散掉。代价是宽屏打开时排版会变（面板位置重排），
+    # 但内容与阅读顺序不变；要"完全一致"的场合请用导出的 PNG。
+    f"@media (max-width: {_LOCK_WIDTH + 40}px) {{"
+    f" .am-sheet {{ width: {_LOCK_WIDTH}px; max-width: {_LOCK_WIDTH}px; margin: 0 auto; }} }}"
+    f"</style>"
+)
+
 
 def clean_page(path: Path) -> int:
-    """给 am 产出的页面做两道清理，就地改写。返回改动次数。"""
+    """给 am 产出的页面做几道清理，就地改写。返回改动次数。"""
     html = path.read_text(encoding="utf-8")
     original = html
     changes = 0
@@ -951,13 +989,14 @@ def clean_page(path: Path) -> int:
         html = stripped
         changes += 1
 
-    if 'id="eoc-uniform-font"' not in html:
-        html = (
-            html.replace("</head>", _FONT_OVERRIDE + "</head>", 1)
-            if "</head>" in html
-            else _FONT_OVERRIDE + html
-        )
-        changes += 1
+    for style_id, style in (("eoc-uniform-font", _FONT_OVERRIDE), ("eoc-width-lock", _WIDTH_LOCK)):
+        if f'id="{style_id}"' not in html:
+            html = (
+                html.replace("</head>", style + "</head>", 1)
+                if "</head>" in html
+                else style + html
+            )
+            changes += 1
 
     if html != original:
         path.write_text(html, encoding="utf-8", newline="\n")
