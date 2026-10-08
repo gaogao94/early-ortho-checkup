@@ -23,7 +23,7 @@
 只在标准库上运行（Python 3.8+），不装任何依赖。
 
 输入 report.json 的字段见 REQUIRED_FIELDS / OPTIONAL_FIELDS：
-必填字段一个都不能少，缺了直接报错退出，**不猜默认值**；uncovered 是唯一的可选字段
+必填字段一个都不能少，缺了直接报错退出，**不猜默认值**；24 题必须全部作答，缺一题不出报告
 （缺省视为空列表，它表示"这题没覆盖到"，缺失与"没有未覆盖题"在报告里是同一种呈现）。
 """
 
@@ -61,9 +61,6 @@ REQUIRED_FIELDS = {
     "next_steps": list,
 }
 
-#: 可选字段（当前只有一个）
-OPTIONAL_FIELDS = ("uncovered",)
-
 HEADLINE_FIELDS = {
     "level": str,
     "level_name": str,
@@ -75,9 +72,10 @@ HEADLINE_FIELDS = {
 DIMENSION_FIELDS = {"id": str, "name": str, "score": int, "gap": str}
 REDLINE_FIELDS = {"id": str, "name": str, "verdict": str, "basis": str}
 ANSWER_FIELDS = {"id": str, "score": int, "quote": str, "basis": str}
-#: 允许为 null 的字段：被跳过的题（"未覆盖"）没有分数，
-#: 用 null 表示"不计分、也不进分母"，而不是用 0 顶替。
-NULLABLE_FIELDS = {("answers", "score")}
+#: 报告要求 24 题全部作答。缺一题就不出报告——见下面的 check_completeness()。
+ALL_QUESTION_IDS = tuple(
+    f"{dim}{n}" for dim in "ABCD" for n in range(1, 7)
+)
 #: 可选字段：缺了不算错。曾经必填、现在不再显示的也放这里，老 JSON 不用改。
 OPTIONAL_ACTION_FIELDS = {"title", "eta"}
 ACTION_FIELDS = {
@@ -227,19 +225,43 @@ def _type_ok(value, expected) -> bool:
     return isinstance(value, expected)
 
 
-def _require(mapping: dict, fields: dict, where: str, *, allow_null: tuple = ()) -> None:
+def _require(mapping: dict, fields: dict, where: str) -> None:
     for key, expected in fields.items():
         if key not in mapping:
             raise InputError(f"缺字段：{where}.{key}（类型应为 {expected.__name__}）")
-        value = mapping[key]
-        if value is None and key in allow_null:
-            continue  # 显式允许 null：表示"未覆盖"，不是错误
-        if not _type_ok(value, expected):
-            hint = "或 null（表示该题未覆盖）" if key in allow_null else ""
+        if not _type_ok(mapping[key], expected):
             raise InputError(
-                f"字段类型错：{where}.{key} 期望 {expected.__name__}{hint}，"
-                f"实际是 {type(value).__name__}"
+                f"字段类型错：{where}.{key} 期望 {expected.__name__}，"
+                f"实际是 {type(mapping[key]).__name__}"
             )
+
+
+def check_completeness(data: dict) -> None:
+    """24 题必须全部作答，缺一题就不出报告。
+
+    这是硬门禁，不是提醒。"不知道"是答案（按锚点判分），"没答"不是答案：
+    缺了任何一题，维度分、等级、红线都得打折说明，交出去的会是一份
+    到处写着"仅供参考"的报告——那种报告不如不出。
+    """
+    got = [a["id"] for a in data["answers"]]
+    missing = [q for q in ALL_QUESTION_IDS if q not in got]
+    extra = [q for q in got if q not in ALL_QUESTION_IDS]
+    if missing or extra:
+        lines = [
+            "输入错误：报告要求 24 题全部作答，现在这份不完整，无法生成报告。",
+            "",
+            f"  应有 {len(ALL_QUESTION_IDS)} 题，实际给了 {len(got)} 题。",
+        ]
+        if missing:
+            lines.append("  还缺这些题：" + "、".join(missing))
+        if extra:
+            lines.append("  多出这些题号（不在题库里）：" + "、".join(extra))
+        lines += [
+            "",
+            "  怎么办：回去把缺的题问掉。答不上来可以让受访者说\"不知道\"——",
+            "  \"不知道\"按锚点判分（通常是 0 档），是有效答案。",
+        ]
+        raise InputError("\n".join(lines))
 
 
 def validate_report(data) -> dict:
@@ -268,10 +290,9 @@ def validate_report(data) -> dict:
         for i, item in enumerate(data[name]):
             if not isinstance(item, dict):
                 raise InputError(f"{name}[{i}] 必须是对象")
-            nullable = tuple(k for (grp, k) in NULLABLE_FIELDS if grp == name)
             required = {k: v for k, v in fields.items() if k not in OPTIONAL_ACTION_FIELDS} \
                 if name == "actions" else fields
-            _require(item, required, f"{name}[{i}]", allow_null=nullable)
+            _require(item, required, f"{name}[{i}]")
 
     for i, item in enumerate(data["next_steps"]):
         if not isinstance(item, str):
@@ -282,13 +303,7 @@ def validate_report(data) -> dict:
             if not isinstance(step, str):
                 raise InputError(f"actions[{i}].todo[{j}] 必须是字符串（当前 {type(step).__name__}）")
 
-    uncovered = data.get("uncovered", [])
-    if not isinstance(uncovered, list):
-        raise InputError("uncovered 必须是数组（题号字符串列表）")
-    for i, item in enumerate(uncovered):
-        if not isinstance(item, str):
-            raise InputError(f"uncovered[{i}] 必须是字符串（当前 {type(item).__name__}）")
-    data["uncovered"] = uncovered
+    check_completeness(data)
 
     for i, item in enumerate(data["actions"]):
         if item["tier"] not in TIER_RANK:
@@ -511,15 +526,12 @@ def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
 
 
 def header_panel(data: dict) -> str:
-    uncovered = data["uncovered"]
-    uncovered_text = "、".join(inline(x) for x in uncovered) if uncovered else "无"
     rows = [
         f"机构：{inline(data['org'])}",
         f"规模：{inline(data['scale'])}",
         f"访谈日期：{inline(data['date'])}",
         f"受访者角色：{inline(data['interviewee'])}",
         f"依据：{inline(data['evidence'])}",
-        f"未覆盖题：{uncovered_text}",
     ]
     return "## 报告信息\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
 
@@ -672,18 +684,6 @@ def redlines_panel(data: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def uncovered_panel(data: dict) -> str:
-    uncovered = data["uncovered"]
-    if not uncovered:
-        return ""
-    listed = "、".join(one_line(x) for x in uncovered)
-    return (
-        "\n## 证据强度\n\n```callout warn 有题没答\n"
-        + f"{listed} 这几题受访者跳过了。跳过不计 0 分也不计满分，该维度的分数仅供参考。"
-        + "\n```\n"
-    )
-
-
 def answers_panel(data: dict) -> str:
     lines = [
         "## 逐题明细 {span=2}",
@@ -708,12 +708,6 @@ def answers_panel(data: dict) -> str:
             f"| {capsule(ans['id'])} | {small(f'{score} 分', 13, color)} "
             f"| {cell(ans['quote'])} | {cell(ans['basis'])} |"
         )
-    uncovered = [a["id"] for a in data["answers"] if a["score"] is None]
-    if uncovered:
-        lines += [
-            "",
-            f"> {'、'.join(uncovered)} 未覆盖，既不计 0 分也不计满分，该维度的证据强度弱一些。",
-        ]
     return "\n".join(lines) + "\n"
 
 
@@ -837,7 +831,6 @@ def build_draft(data: dict, *, theme: str, template: str, style: str) -> str:
     # am 会自动给面板分配 A、B、C 字母，两套编号并排出现是重复（去 AI 味规则第 6 条）。
     panels = [
         header_panel(data),
-        uncovered_panel(data),
         headline_panel(data),
         score_panel(data),
         redlines_panel(data),

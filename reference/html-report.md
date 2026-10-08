@@ -60,21 +60,22 @@ Markdown 报告的 8 个部分加报告头，映射到 8 个面板。**面板编
 
 | # | 面板标题 | 组件 | 为什么用这个组件 |
 |---|---|---|---|
-| A | `## 报告头 {bare}` | `kv cols=2` | 机构、规模、日期、受访者、依据是键值对，不是叙述；`{bare}` 去掉标题栏，正好当页眉块 |
-| A2 | `## 证据强度` | `callout warn` | **仅当有未覆盖题时出现**。跳过的题让证据变弱，这件事必须在开头说清 |
+| A | `## 报告信息 {bare}` | `kv cols=2` | 机构、规模、日期、受访者、依据是键值对，不是叙述；`{bare}` 去掉标题栏，正好当页眉块 |
 | B | `## 结论` | `callout info` + 命中红线时的 `callout err` | 结论必须第一眼看到。红线是"质"的判断，单独用红条标出来 |
-| C | `## 分数与等级 {span=2}` | Markdown 表格 | 报告里唯一需要"一眼看懂处境"的地方：L1–L4 四档列全，当前档打 `ok ← 你现在在这里`；下面接四个维度的得分表 |
-| D | `## 四条红线 {span=2}` | Markdown 表格（+ 状态词） | 4 条红线逐条给"命中/未命中/信息不足"，状态词渲染成 ✓ / ✗ / ! |
+| C | `## 分数与等级 {span=2}` | Markdown 表格 + 维度竖杠行 | 报告里唯一需要"一眼看懂处境"的地方：L1–L4 四档列全、当前档整行高亮；下面接四行维度得分 |
+| D | `## 四条红线 {span=2}` | Markdown 表格 | 4 条红线逐条给"命中 / 未命中"，**命中的整条标红** |
 | E | `## 逐题明细 {span=2}` | Markdown 表格 | 24 行明细，表格是唯一合适的形式 |
-| F | `## 该做什么，按先后排 {span=2}` | `flow LR` + 小节 + 有序列表 | 开头一条 `callout warn` 放"这周就开始"，然后 `flow` 表达优先序，每个动作用完整句子说现状、步骤、验收 |
-| G | `## 90 天怎么排 {span=2}` | `timeline v` | 时间轴是"周次 → 交付物"的序列，`timeline` 专为此设计 |
-| H | `## 八个关键数字 {span=2}` | Markdown 表格（+ 状态词） | 8 行 × 3 列，"拿到了/还不知道"用状态词标记 |
+| F | `## 该做什么 {span=2}` | `callout warn` + `flow LR` + 分隔线 | 开头一条"这周就开始"，然后 `flow` 表达顺序，每个动作一个待办小节、档位用 tag |
+| G | `## 90 天怎么排 {span=2}` | Markdown 表格 | 四列左对齐，一行一个阶段。**不要用 `timeline`**：它把标题居中、正文塞在下面，四段并排时读不出下面那行属于哪一段 |
+| H | `## 八个关键数字 {span=2}` | Markdown 表格 | 8 行 × 3 列，未知的数值列写"还不知道" |
 
 **为什么"下一步"没有单独一节**：它和「该做什么」说的是同一件事——下一步就是动作清单里的第一件。单开一节会让读者看到两遍相似的内容，所以它并入 F 的面板开头。
 
-**面板数量**：8 个（有未覆盖题时 9 个）。**超过 9 个必须拆页**，不要把两份内容塞进一页。
+**面板数量**：固定 8 个（有红线命中时结论区多一条 callout，不增加面板数）。**超过 9 个必须拆页**，不要把两份内容塞进一页。
 
-**面板顺序**：严格按上表 A → B → C → D → E → F → G → H 写（报告头 → 结论 → 分数等级 → 红线 → 逐题 → 动作 → 路线图 → 指标）。理由：判断在前、明细在后。不要为了排版好看调换顺序，顺序本身是结论优先的体现。
+**24 题必须全部作答。** 报告要求答题完整，缺一题就不生成——所以页面里不会出现"未覆盖""证据不足""仅供参考"这类打折说明。`tools/render_report.py` 有一道硬门禁：`answers` 不足 24 题会直接报错退出（exit 2），并列出缺哪几题。
+
+**面板顺序**：严格按上表 A → B → C → D → E → F → G → H 写（报告信息 → 结论 → 分数等级 → 红线 → 逐题 → 动作 → 路线图 → 指标）。理由：判断在前、明细在后。不要为了排版好看调换顺序，顺序本身是结论优先的体现。
 
 **列宽靠 `{span=2}` 控制，不是靠改 cols**：`cols` 固定写 3。三列表格（分数、红线、逐题、动作、路线图、指标）各占 2 列，否则会被压成逐字换行（实测过：K 指标表在 1/3 宽列下每个字一行）。只有报告头这类键值块留在 1 列宽的窄栏里。
 
@@ -86,23 +87,26 @@ Markdown 报告的 8 个部分加报告头，映射到 8 个面板。**面板编
 
 ### 不要状态词徽章
 
-am 会把表格单元格里的 `ok` / `no` / `warn` 换成 ✓ / ✗ / ! 徽章。**本报告一律不用**：结论列直接写「命中」「未命中」「信息不足」，判分列直接写 `2/3`，指标列直接写数值。读者要看的是判断结果和数字，不是一排图标。
+am 会把表格单元格里的 `ok` / `no` / `warn` 换成 ✓ / ✗ / ! 徽章。**本报告一律不用**：结论列直接写「命中」「未命中」，得分列直接写 `2 分`，指标列直接写数值。读者要看的是判断结果和数字，不是一排图标。
 
-需要颜色时用行内 `<span style="color:…">`，不用徽章。`tools/render_report.py` 已经把这条写进实现，并有一条测试断言 `am-badge` 出现次数为 0。
+需要颜色时用行内 `<span style="color:…">`，不用徽章。`tools/render_report.py` 已经把这条写进实现，渲染后 `am-badge` 出现次数应当是 0（可 grep 校验）。
 
-### 短码做成胶囊
+### 短码做成 tag
 
-行内 `<span>` 的 `style` 属性 am 会原样保留（实测），所以题号、指标号、动作号都做成胶囊：
+行内 `<span>` 的 `style` 属性 am 会原样保留（实测），所以题号、指标号、档位都做成 tag：
 
 ```html
-<span style="display:inline-block;padding:1px 8px;border:1px solid #e4e4e7;
-border-radius:999px;background:#f4f4f5;font-size:12px">1-1</span>
+<span style="display:inline-block;padding:1px 8px;border-radius:6px;
+background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600">A1</span>
 ```
 
-两条规则：
+三条规则：
 
-1. **契约短码不直接上页面。** `A1` 显示成 `1-1`，`R2` 显示成「红线2」那一行的行名，`K4` 显示成 `指标4`，`ACT-3` 显示成 `动作3`。契约层（question-bank / playbook / report.json）继续用原始短码，那是编号一致性的基础；页面是给老板看的，不承担契约职责。
-2. **一句话里的裸题号也要包起来。** 「重点对比题号 1-1 1-2 1-4…」这九个短码连在一起就是一片字母噪声，换成胶囊才能一眼数出几个。
+1. **题号保留维度字母。** 页面上一律写 `A1`、`B4`、`D2`——不要换成 `1-1`。带字母才知道属于哪个维度。
+2. **指标号和动作号换成中文说法。** `K4` 写「指标4」，`ACT-3` 只出现在流程图的短标题里，动作标题用待办的说法（"结束病例要过一遍复核"），不出现 `ACT-3` 这个编号。
+3. **一句话里的裸题号也要包起来。** 「重点对比题号 A1 A2 A4 A5 B1 B4 B5 D2 D4」九个短码连在一起就是一片字母噪声，换成 tag 才能一眼数出几个。
+
+**字体用正文字体，不要等宽体。** 等宽体在中文报告里像代码，中文标签字形也是外挂的。
 
 ### 单位口径：维度用 18 分制，总分用百分制
 
@@ -112,215 +116,254 @@ border-radius:999px;background:#f4f4f5;font-size:12px">1-1</span>
 
 **不要**把维度分先折成 0–100 再平均出总分——多一次换算只会让读者怀疑"是不是又加了权重"。
 
-**未覆盖题的写法**：`uncovered` 非空时，在报告信息面板下方加一段
-
-````markdown
-```callout warn 本题未覆盖
-未覆盖题：A4 A5。该维度证据不足，得分仅供参考。
-```
-````
-
-`uncovered` 为空时**不加**这个面板，页面不要保留空段。
+**没有"未覆盖题"这个面板。** 报告要求 24 题全部作答，缺一题直接不生成，所以页面上不存在"证据不足""仅供参考"这类打折说明。渲染器会拦住不完整的输入。
 
 **每个面板一个主题**：一个面板只回答一个问题。不要把"红线诊断"和"逐题明细"合成一个面板。
 
-**红线命中的呈现**：走**两条**——面板 B2 的 `callout err`（把命中的红线与封顶结论摆在一起，最醒目）+ 面板 D 的表格状态词（逐条给"命中 / 未命中 / 信息不足"）。B2 只在真有命中时出现，所以它承载的是"这次体检有坏消息"这个信号，不是复述表格。不要把每条红线各开一个 callout——那会把面板数顶到 9 以上。
+**红线命中的呈现**：走**两条**——结论面板里的 `callout err`（把命中的红线与封顶结果说在一起，最醒目）+ 面板 D 的表格（逐条给"命中 / 未命中"，命中的整条标红）。callout 只在真有命中时出现，它承载的是"这次体检有坏消息"这个信号，不是复述表格。不要把每条红线各开一个 callout。
 
-**`callout` 计数是自检信号**：无红线命中、`uncovered` 为空时是 2 条（结论 + 下一步）；有红线命中时 3 条（+ B2）；`uncovered` 非空时再 +1。对不上说明面板少写或多写了。
-
----
-
-## 4. 状态徽章的固定约定
-
-am 把表格单元格开头的 `ok` / `no` / `warn` 渲染成 ✓ / ✗ / ! 徽章，词后面的中文会成为徽章文字（实测 `no 命中` → `✗ 命中`，`ok 有数` → `✓ 有数`）。
-
-**写法规则**：状态词必须是单元格的第一个词，用半角小写，不加大写、不加反引号、不加粗。**不要用别的词代替**（`是`/`否`/`部分` 不会渲染成徽章）。
-
-**状态词后面的中文会变成徽章文字**（实测 `no 命中` → `✗ 命中`）；只写状态词也渲染徽章，但会是一个没有文字的孤零零图标。本规范**固定带后面的中文**，让截图单独看也能懂。
-
-| 位置 | 填什么 | 状态词 | 渲染 |
-|---|---|---|---|
-| 红线诊断表「结论」列 | 命中 | `no 命中` | ✗ 命中 |
-| 红线诊断表「结论」列 | 未命中 | `ok 未命中` | ✓ 未命中 |
-| 红线诊断表「结论」列 | 信息不足 | `warn 信息不足` | ! 信息不足 |
-| 四维得分表「档位」列 | 维度分 81–100 | `ok 达标` | ✓ 达标 |
-| 四维得分表「档位」列 | 维度分 56–80 | `warn 待补` | ! 待补 |
-| 四维得分表「档位」列 | 维度分 ≤ 55 | `no 缺口` | ✗ 缺口 |
-| K 指标表「状态」列 | 有数值 | `ok 有数` | ✓ 有数 |
-| K 指标表「状态」列 | 未知 | `warn 未知` | ! 未知 |
-
-档位判据直接复用 SKILL.md 的等级区间（L1 0–30 / L2 31–55 / L3 56–80 / L4 81–100），所以维度分 ≤ 55 落 `no`、56–80 落 `warn`、81–100 落 `ok`。**不要另造一套阈值。**
-
-**不写状态词的地方**：
-
-- **逐题明细表**（面板 H）：不设状态列。判分列写 `2/3` 这样的分数，档位信息已经在那里面。另有一个技术原因：状态格写 `no` 会让 am 跳过该行整行的文字检查（见 §6），明细表用它会把受访者原话里的问题词一起遮掉。
-- **优先序 `flow`**、**`timeline`**、**`kv`**：状态词只写在表格单元格里，这三个组件里不要写。
-- **`callout` 的类型**用 `info` / `ok` / `warn` / `err` 四个参数表达，不靠正文里的状态词。四型都实测可渲染（见 §9 CMD5）。
+**`callout` 计数是自检信号**：无红线命中时 2 条（结论区的"没有一票否决的问题" + 该做什么开头的"这周就开始"）；有红线命中时同样是 2 条，只是第一条变成 `err`。对不上说明面板少写或多写了。
 
 ---
 
-## 5. 完整 draft 骨架（实测通过，可直接抄）
+## 4. 颜色约定：不用徽章，用行内颜色
 
-虚构数据：康桥口腔门诊（原分 31、命中 R2/R3/R4、封顶 L1、四维 39/28/39/17、优先序 ACT-2 → ACT-1 → ACT-5 → ACT-6 → ACT-3 → ACT-4），与 `docs/example-run.md` 一致。
+am 会把表格单元格开头的 `ok` / `no` / `warn` 渲染成 ✓ / ✗ / ! 徽章。**本报告一个都不用。**
 
-**下面这段整段渲染通过**（命令与输出见 §9 CMD1）：
+理由：读者要看的是判断结果和数字，不是一排图标。一屏十几个 ✓✗! 会把注意力从内容上带走；红线命中的信息用颜色表达比用图标表达更直接。
+
+**替代做法**：需要强调时用行内 `<span style="color:…">`。
+
+| 位置 | 怎么表达 |
+|---|---|
+| 红线表：命中的那条 | 行名与结论都用 `<span style="color:#dc2626;font-weight:700">` 标红 |
+| 红线表：未命中 | 不标色，正文色 |
+| 逐题明细：得分 | `3 分` 绿、`1–2 分` 琥珀、`0 分` 红，只给数字上色 |
+| 指标表：还不知道 | 数值列写 `<span style="color:#d97706">还不知道</span>` |
+| 当前等级那一行 | 整行加 `background:#eff6ff` 底色 |
+
+**校验办法**：渲染后 grep 生成的 HTML，`am-badge` 出现次数必须是 0。
+
+**不写状态词的地方**：`flow`、`timeline`、`kv` 三个组件里不要写状态词——它们不做徽章替换，写了就是把 `ok`、`no` 这些词原样显示给读者。
+
+---
+
+## 5. 完整 draft 骨架
+
+**不要手抄这一节。** 生产路径是 `tools/render_report.py`：它从 `report.json` 生成 draft、
+调 am 渲染、导出 PNG。这一节给出的是**它实际产出的样子**，用来对照检查渲染器有没有跑对。
+
+虚构数据：康桥口腔门诊（总分 31、命中 R2/R3/R4、封顶 L1、四维 39/28/39/17）。
+
+生成命令：
+
+```bash
+python tools/render_report.py docs/example-run.json -o /tmp/report.html --png --dump-draft
+```
+
+实测产出（`case1_kangqiao_L1.draft.md`，渲染 8 面板、0 徽章）：
 
 ````markdown
 ---
 template: sheet
 theme: shadcn
-title: 早矫管理体检报告
-subtitle: 康桥口腔门诊 · 2026-10-08 · 结论 L1 无标准
+title: 康桥口腔门诊 · 早矫管理体检报告
+subtitle: 2026-10-08
 cols: 3
-org: 康桥口腔门诊
-scale: 3 名正畸医生 / 年新接约 180 例
-date: 2026-10-08
-interviewee: 老板兼医疗主管
-evidence: 24 题访谈自述 + 数据自查工具输出
-uncovered: 无
 ---
 
-## A {bare}
+## 报告信息
 
 ```kv cols=2
-* 机构: 康桥口腔门诊
-规模: 3 名正畸医生 / 年新接约 180 例
-访谈日期: 2026-10-08
-受访者角色: 老板兼医疗主管
-依据: 24 题访谈自述 + 数据自查工具输出
-未覆盖题: 无
+机构：康桥口腔门诊
+规模：3 名正畸医生 / 年新接约 180 例
+访谈日期：2026-10-08
+受访者角色：老板兼医疗主管，姓周
+依据：24 题访谈自述，加上数据自查工具跑出的一份 243 例在册病例汇总
 ```
 
-## B 一句话结论
+## 结论
 
-```callout info L1 无标准
-**原分 31**（L2 刚起步），因命中 R2、R3、R4 封顶至 L1。这家门诊有 243 例在册体量，但没有一个控制点留在管理者手上。
-没有周期标准与延期数据，病例结束由经治医生自己说了算，提成在收款次月就发完了。
+<span style="font-size:64px;font-weight:800;letter-spacing:-1px;line-height:1;color:#09090b">L1</span>&nbsp;&nbsp;<span style="font-size:26px;font-weight:800;letter-spacing:-1px;line-height:1;color:#71717a">无标准</span>&nbsp;&nbsp;<span style="font-size:20px;color:#71717a">31 分</span>
+
+```callout err 这 3 项问题把等级拉低了
+按总分数本来能到 L2 刚起步 档。但 无周期标准、结束无人核、提成一次性发 属于一票否决的问题，所以等级只算 L1。
 ```
 
-## B2 红线等级
+## 分数与等级 {span=2}
 
-```callout err 红线等级
-命中 R2、R3、R4，**等级封顶至 L1**（总分栏保持原分 31）。
-```
-
-差的那一个数（超期病例数）单列进 K2。
-
-## C 四维得分
-
-| 维度 | 得分 | 档位 | 该维度最大的缺口 |
-|---|---|---|---|
-| A 标准与分级 | 39/100 | no 缺口 | 无成文标准，无难度与能力分级，产能上限未量化 |
-| B 方案审核与结案 | 28/100 | no 缺口 | 方案只口头过一眼，结束无复核，终点定在拆托槽 |
-| C 记录与过程数据 | 39/100 | no 缺口 | 重启率与延期从未统计，椅位时长未进系统 |
-| D 财务与激励 | 17/100 | no 缺口 | 提成一次性发完，绩效不挂结束质量，预收款全额计收入 |
-| **总分** | **31/100** | | 原分，不因红线改写 |
-
-档位判据：81–100 → `ok`；56–80 → `warn`；55 及以下 → `no`。
-
-## D 红线诊断
-
-| 红线 | 结论 | 依据（题号 + 受访者原话） |
+| 等级 | 这一档的样子 | 分数段 |
 |---|---|---|
-| R1 底数不清 | ok 未命中 | A1 判 2：在册 243 例拿得到，超期数要临时统计 |
-| R2 无周期标准 | no 命中 | A2 判 1：只有口头的 18 个月，延期数从未算过 |
-| R3 结束无人核 | no 命中 | B4 判 0：医生觉得可以了就拆，无人复核 |
-| R4 提成一次性发 | no 命中 | D2 判 0：提成收款次月一次性发完 |
+| <span style="background:#eff6ff;display:block;font-weight:800">L1 无标准</span> | <span style="background:#eff6ff;display:block">没有标准、没有计划时长、没有账，全凭医生个人</span> | <span style="background:#eff6ff;display:block">0–30</span> |
+| **L2 刚起步** | 有零散做法，但不留痕、不可复算 | 31–55 |
+| **L3 有体系** | 有标准能执行、数据可查，结案复核还有缺口 | 56–80 |
+| **L4 能自转** | 标准、审核、留痕、复核、激励、财务全部到位 | 81–100 |
 
-命中 3 项，等级封顶 L1；总分栏保持原分 31。
+### 四个维度各得多少
 
-## E 优先改进动作
+<span style="display:inline-block;border-left:3px solid #2563eb;padding:2px 0 2px 10px;margin:5px 0"><span style="font-weight:700">维度1｜标准与分级</span><span style="font-size:19px;font-weight:800;color:#2563eb;padding:0 6px 0 12px">7</span><span style="font-size:12px;color:#71717a">/18　</span>无成文过程标准，难度与能力分级不存在，产能上限没量化</span>
+
+<span style="display:inline-block;border-left:3px solid #2563eb;padding:2px 0 2px 10px;margin:5px 0"><span style="font-weight:700">维度2｜方案审核与结案</span><span style="font-size:19px;font-weight:800;color:#2563eb;padding:0 6px 0 12px">5</span><span style="font-size:12px;color:#71717a">/18　</span>方案只口头过一眼，结束无复核，终点定在拆托槽</span>
+
+<span style="display:inline-block;border-left:3px solid #2563eb;padding:2px 0 2px 10px;margin:5px 0"><span style="font-weight:700">维度3｜记录与过程数据</span><span style="font-size:19px;font-weight:800;color:#2563eb;padding:0 6px 0 12px">7</span><span style="font-size:12px;color:#71717a">/18　</span>重启率与延期从未统计，椅位时长未进系统，计划外处理混在常规记录里</span>
+
+<span style="display:inline-block;border-left:3px solid #2563eb;padding:2px 0 2px 10px;margin:5px 0"><span style="font-weight:700">维度4｜财务与激励</span><span style="font-size:19px;font-weight:800;color:#2563eb;padding:0 6px 0 12px">3</span><span style="font-size:12px;color:#71717a">/18　</span>提成一次发完，绩效不挂结束质量，预收款全额计收入，算不出单例毛利</span>
+
+
+## 四条红线 {span=2}
+
+| 红线 | 结论 | 依据 |
+|---|---|---|
+| 底数不清 | 未命中 | A1 判 2：在册数能导出，超期数要临时统计 |
+| <span style="color:#dc2626;font-weight:700">无周期标准</span> | <span style="color:#dc2626;font-weight:700">命中</span> | A2 判 1：只有口头的 18 个月，答完 A2 给不出可核延期数字；B5 也只给终点定义 |
+| <span style="color:#dc2626;font-weight:700">结束无人核</span> | <span style="color:#dc2626;font-weight:700">命中</span> | B4 判 0：结束由经治医生口头判定，无书面复核 |
+| <span style="color:#dc2626;font-weight:700">提成一次性发</span> | <span style="color:#dc2626;font-weight:700">命中</span> | D2 判 0：收款次月一次性发全额提成 |
+
+## 逐题明细 {span=2}
+
+| 题号 | 分数 | 受访者关键原话 | 判分依据 |
+|---|---|---|---|
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A1</span> | <span style="font-size:13px;color:#d97706">2 分</span> | 在册 243 例。超期数没统计过，印象里不少 | 在册数能导出，超期数要临时统计 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A2</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 计划一般按 18 个月跟家长说，平均延期没算过 | 只有口头印象，无成文标准、无延期统计 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A3</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 没写成文字，基本都是我跟另外两个医生平时聊出来的共识 | 有内部共识，无成文文件 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A4</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 没有正式分级，就是看谁手上不忙、谁擅长这类 | 医生心里有数，无成文分级 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A5</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 谁能力强我知道，靠年头和平时看的病例 | 分级在管理者印象里，无客观数据 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A6</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 一个月进来 20 个我们也能接，就是大家都累点 | 知道会吃不消，未量化产能上限 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B1</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 新病例基本我都会看一眼，微信上说一下 | 有非正式招呼，没有审核记录 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B2</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 主要看诊断对不对；具体做多久医生自己跟家长谈 | 看诊断，目标与计划时长不固定 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B3</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 最近半年开始写了，老病例没写 | 有意识、覆盖新病例，无固定间隔要求 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B4</span> | <span style="font-size:13px;color:#dc2626">0 分</span> | 医生觉得可以了就拆，拆完跟我说一声，发个前后对比照 | 无复核，经治医生口头判定→ R3 命中 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B5</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 拆完托槽就算结束，保持器阶段归前台跟 | 默认拆托槽为结束，保持器不在管理范围 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B6</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 医生觉得不对会跟我说，没有固定流程 | 有口头说明，无记录、无触发条件 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">C1</span> | <span style="font-size:13px;color:#d97706">2 分</span> | 复诊都挂号的，但偶尔钢丝扎嘴来弄一下就不挂了 | 有要求、执行有漏洞、无人核查 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">C2</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 会写主诉和处理，掉托槽这类没单独标 | 有记录但随意，计划外混在常规里 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">C3</span> | <span style="font-size:13px;color:#d97706">2 分</span> | 报表能看到每个病例来过几次，椅位时长没进系统 | 能看到部分指标，椅位时长缺 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">C4</span> | <span style="font-size:13px;color:#dc2626">0 分</span> | 重启率、延期都没统计过，医疗主管说历史上重启过 8 例 | 两个数都没统计 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">C5</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 有的医生会跟家长讲进度，有的不太讲 | 有对照进度行为但不固定 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">C6</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 耗材有采购记录，加工件记在门诊账上，没到病例 | 出入库只到门店层级 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D1</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 收款就全额开票算收入了 | 无预收款概念，一直这么算 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D2</span> | <span style="font-size:13px;color:#dc2626">0 分</span> | 提成收款次月一次性发完 | 一次性发全额→ R4 命中 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D3</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 每个月看新接多少例、到账多少；预收款没单独看 | 知道欠服务，未量化、无月度对比 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D4</span> | <span style="font-size:13px;color:#dc2626">0 分</span> | 绩效跟收入和接诊量挂钩，结束快慢不挂钩 | 绩效只跟新接病例数和收入挂钩 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D5</span> | <span style="font-size:13px;color:#d97706">1 分</span> | 大概算过，收费减材料，人工和椅位没算进去 | 粗略估算，不含人工与椅位 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D6</span> | <span style="font-size:13px;color:#dc2626">0 分</span> | 没算过就诊次单价 | 没有这个概念 |
+
+## 该做什么 {span=2}
+
+```callout warn 这周就开始
+1. 导出 243 例在册病例，补上「计划结束日期」一列。算出超期病例数和平均延期月数，顺带补齐 K1 缺的另一半
+2. 结案状态从「拆托槽」改成「首次保持器复诊通过」。统计口径与绩效结算口径同步改
+3. 建议 2026-12-08 重跑本问卷，重点对比题号 <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A1</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A2</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A4</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">A5</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B1</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B4</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">B5</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D2</span> <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">D4</span>，看三条红线是否解除。
+```
 
 ```flow LR
-(ACT-2 P0) -> (ACT-1 P0) -> (ACT-5 P1) -> (ACT-6 P2) -> (ACT-3 P2) -> (ACT-4 P2)
+1 结束病例要过一遍复核 -> 2 先把底数、标准、分级补起来
+2 先把底数、标准、分级补起来 -> 3 提成改成按节点发: P1
+3 提成改成按节点发 -> 4 把每个病例赚不赚钱算清楚: P2
+4 把每个病例赚不赚钱算清楚 -> 5 每次复诊对着阶段目标看进度
+5 每次复诊对着阶段目标看进度 -> 6 每次来都留下记录
+group P0: 1 结束病例要过一遍复核, 2 先把底数、标准、分级补起来
+group P1: 3 提成改成按节点发
+group P2: 4 把每个病例赚不赚钱算清楚, 5 每次复诊对着阶段目标看进度, 6 每次来都留下记录
 ```
 
-### 1. ACT-2 结果要核【P0】
+---
 
-- **现状**：B4 判 0——"医生觉得可以了就拆，拆完跟我说一声"。
-- **要做的事**：把终点定义从拆托槽改成首次保持器复诊通过；立一页结束复核表。
-- **验收标准**：新结案病例都有复核表，四项指标可查。
-- **预计见效时间**：2 周。
+### 1. 结束病例要过一遍复核<span style="display:inline-block;padding:2px 10px;margin-left:10px;border-radius:6px;background:#fef2f2;color:#dc2626;font-size:12px;font-weight:700;vertical-align:2px">先做</span>
 
-### 2. ACT-1 建标准、分级、看底数【P0】
+结束由经治医生口头判定；终点定在拆托槽；重启率与延期从未统计；绩效不挂结束质量。
 
-- **现状**：A1 判 2、A4 判 1——底数只有一半，没有难度分级。
-- **要做的事**：导出 243 例在册清单，补计划结束日期；写一页分级表。
-- **验收标准**：在册数与超期数能随口报出，且与系统一致。
-- **预计见效时间**：2 周。
+1. 结案状态从「拆托槽」改成「首次保持器复诊通过」。系统状态、统计口径、绩效结算三处同步改
+2. 结束复核表落地，先只保留四项：脱矿率、新发龋率、按期完成率、患者主观感受。
+3. 重启率与延期月数按月出数，进入管理复盘。
+4. 复核结果进入医生绩效。
 
-### 3. ACT-5 提成按阶段发【P1】
+做到这一步算完成。改口径后第一个月：在册病例的超期数与平均延期月数能随口报出；至少 3 个结案病例走过书面复核。
 
-- **现状**：D2 判 0——"提成收款次月一次性发完"。
-- **要做的事**：把提成拆到病例各阶段，定分期比例与公示规则。
-- **验收标准**：新收病例按阶段发放，存量病例有过渡口径。
-- **预计见效时间**：1–2 个月。
+---
 
-## F 90 天路线图
+### 2. 先把底数、标准、分级补起来<span style="display:inline-block;padding:2px 10px;margin-left:10px;border-radius:6px;background:#fef2f2;color:#dc2626;font-size:12px;font-weight:700;vertical-align:2px">先做</span>
 
-```timeline v
-第 1–2 周 | 摸底数与改终点 | 在册病例底数表 + 终点定义书面口径
-*第 3–6 周 | 立标准与复核表 | 分级表、审核表、结束复核表
-第 7–12 周 | 提成分期与绩效挂钩 | 分期提成规则 + 绩效口径
-```
+没有成文的过程管理标准；难度与能力分级不存在；产能上限没量化；方案只口头过一眼。
 
-## G 八个关键指标
+1. 导出 243 例在册病例清单，补上「计划结束日期」一列，算出超期病例数与平均延期月数。
+2. 出第一版病例难度分级与医生能力分级，对应到「谁能接什么」。
+3. 第一版方案审核表固定三项：诊断依据、治疗目标、计划结束时长。
+4. 定一条承接容量线：每个医生在册病例上限。
 
-| 指标 | 数值 | 状态 | 说明 / 取证方式 |
+做到这一步算完成。底数表能对上系统；至少 3 个新病例走完审核并留下记录；分级能解释上个月病例分给了谁、为什么。
+
+---
+
+### 3. 提成改成按节点发<span style="display:inline-block;padding:2px 10px;margin-left:10px;border-radius:6px;background:#fffbeb;color:#d97706;font-size:12px;font-weight:700;vertical-align:2px">接着做</span>
+
+提成在收款次月一次性发完；绩效不挂按期结束与结束质量。
+
+1. 提成改分期：收款发一部分、中期发一部分、病例结束且质控合格发尾款。
+2. 尾款占比定在能形成约束的水平（例如不低于三成），规则写进薪酬制度并公示。
+3. 绩效里加入按期完成率与结束质量，权重可观。
+
+做到这一步算完成。薪酬规则公示；未发部分在医生离职时能明确归属接手医生。
+
+---
+
+### 4. 把每个病例赚不赚钱算清楚<span style="display:inline-block;padding:2px 10px;margin-left:10px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:700;vertical-align:2px">以后做</span>
+
+预收款全额计收入；没有未交付服务与产能的月度对照；算不出单例毛利与就诊次单价。
+
+1. 定收入确认规则，报表单列预收款负债余额。
+2. 每月对一次「未交付预收款余额 vs 在册病例交付能力」。
+3. 做 5 例单例损益卡，算出单例就诊次单价。
+
+做到这一步算完成。能回答「这一单赚不赚钱、和别的项目比怎么样」。
+
+---
+
+### 5. 每次复诊对着阶段目标看进度<span style="display:inline-block;padding:2px 10px;margin-left:10px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:700;vertical-align:2px">以后做</span>
+
+阶段目标只在最近半年的新病例上写；复诊不固定对照；偏离没有触发条件。
+
+1. 方案模板加入按时间分解的阶段目标表。
+2. 每次复诊对照阶段目标，并与家长确认进度。
+3. 定偏离的触发条件与记录要求。
+
+做到这一步算完成。新病例方案都含阶段目标表；落后一个阶段以上的病例单独成清单。
+
+---
+
+### 6. 每次来都留下记录<span style="display:inline-block;padding:2px 10px;margin-left:10px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:700;vertical-align:2px">以后做</span>
+
+简单处理常不挂号；计划外处理混在常规记录里；椅位时长未进系统；成本归不到病例。
+
+1. 挂号台加「早矫复诊（含简单处理）」快捷号别，把挂号压到 10 秒内。
+2. 复诊记录给计划外处理加单独标识。
+3. 椅位占用时长进系统；耗材出入库从加工件抓起。
+
+做到这一步算完成。报销表与病历记录能对上；每例计划外复诊次数可统计。
+
+
+## 90 天怎么排 {span=2}
+
+| 时间 | 要做什么 | 交付什么 | 怎样算做完 |
 |---|---|---|---|
-| K1 在册病例数 | 243 | ok 有数 | 前台导出，与病历系统对账一致 |
-| K2 延期病例占比 | 未知 | warn 未知 | 先在系统补计划结束日期字段，再按 as-of 日期比对 |
-| K3 计划 vs 实际时长 | 计划 18 个月；已结案实际均值 20.1 个月 | ok 有数 | 口径为拆托槽日期 |
-| K4 平均延期月数 | 在册未见结案 4.5 个月；已结案 2.1 个月 | ok 有数 | 两个数不是一个口径，必须标 population |
-| K5 计划外复诊率 | 未知 | warn 未知 | 复诊记录未单列计划外处理，先加标识字段 |
-| K6 椅位时长 / 每例次数 | 每例均 20.8 次；椅位时长未知 | warn 未知 | 椅位时长只在挂号本，需补录或现场计时抽样 |
-| K7 重启率 / 二次治疗率 | 未知 | warn 未知 | 系统无重启标识，医疗主管口径不可用 |
-| K8 单例就诊次单价 | 收入侧 1385 元/次；成本侧未知 | warn 未知 | 成本侧缺椅位时长与病例级材料成本 |
+| 第 1–2 周 | 摸底数与终点定义 | 在册病例底数表 + 终点定义书面口径 + 容量线 | 在册数与超期数能随口报出且对得上系统 |
+| 第 3–6 周 | 立标准与分级 | 分级表 + 审核表 + 阶段目标模板 | 至少 3 个新病例走完新流程并留下记录 |
+| 第 7–10 周 | 建记录与复核 | 四张报表 + 结束复核表 | 报表数据与病历记录能对上 |
+| 第 11–13 周 | 调钱和账 | 薪酬调整规则 + 三张财务表 + 5 张损益卡 | 能回答单例赚不赚钱 |
 
-## H 逐题明细
+## 八个关键数字 {span=2}
 
-| 题号 | 判分 | 受访者关键原话 | 判分依据 |
-|---|---|---|---|
-| A1 | 2/3 | "在册 243 例；超期数没统计过" | 在册数能导出，超期数要临时统计 |
-| A2 | 1/3 | "计划一般按 18 个月跟家长说，平均延期没算过" | 只有口头印象，无成文标准 |
-| A3 | 1/3 | "没写成文字，基本是平时聊出来的共识" | 有内部共识，无成文文件 |
-| A4 | 1/3 | "没有正式分级，按谁不忙和谁擅长来分" | 医生心里有数，无成文分级 |
-| A5 | 1/3 | "谁能力强我知道，靠年头和平时看的病例" | 分级在管理者印象里，无客观数据 |
-| A6 | 1/3 | "一个月进来 20 个也能接，就是累点" | 知道会吃不消，产能上限未量化 |
-| B1 | 1/3 | "新病例基本我都会看一眼，微信上说一下" | 有口头招呼，无审核记录 |
-| B2 | 1/3 | "主要看诊断对不对、方案合不合理" | 看诊断，目标与计划时长不固定 |
-| B3 | 1/3 | "最近半年开始写了，老病例没写" | 有阶段目标意识，无固定间隔要求 |
-| B4 | 0/3 | "医生觉得可以了就拆，拆完跟我说一声" | 无复核，经治医生口头判定 |
-| B5 | 1/3 | "拆完托槽就算结束，保持器阶段归前台跟" | 默认拆托槽为结束 |
-| B6 | 1/3 | "医生觉得不对会跟我说，没有固定流程" | 有口头说明，无记录、无触发条件 |
-| C1 | 2/3 | "复诊都挂号的，偶尔钢丝扎嘴来弄一下就不挂了" | 有要求、执行有漏洞、无人核查 |
-| C2 | 1/3 | "会写主诉和处理，掉托槽这类没单独标" | 有记录但随意，计划外混在常规里 |
-| C3 | 2/3 | "报表能看到每个病例来过几次，椅位时长没进系统" | 部分指标可查，椅位时长仍缺 |
-| C4 | 0/3 | "重启率、延期都没统计过" | 两个数都没统计 |
-| C5 | 1/3 | "有的医生会跟家长讲进度，有的不太讲" | 有对照进度行为，不固定 |
-| C6 | 1/3 | "耗材有采购记录，加工件记在门诊账上" | 出入库只到门店层级 |
-| D1 | 1/3 | "收款就全额开票算收入了" | 没有预收款概念 |
-| D2 | 0/3 | "提成收款次月一次性发完" | 一次性发全额 |
-| D3 | 1/3 | "每个月看新接多少例、到账多少；预收款没单独看" | 心里知道欠服务，未量化 |
-| D4 | 0/3 | "绩效跟收入和接诊量挂钩，结束快慢不挂钩" | 绩效不挂结束质量 |
-| D5 | 1/3 | "大概算过，收费减材料，人工和椅位没算进去" | 粗略估算，不含人工与椅位 |
-| D6 | 0/3 | "没算过就诊次单价" | 没有这个概念 |
-
-## I 下一步
-
-```callout warn 只做一件事
-1. 把 243 例在册病例导出成一张表，补上计划结束日期，算出超期病例数与平均延期月数。
-2. 把结案状态从拆托槽改成首次保持器复诊通过。
-3. 建议 2026-12-08 重跑本问卷，重点题号 A1 A2 A4 A5 B1 B4 B5 D2 D4。
-```
+| 指标 | 数值 | 从哪来 |
+|---|---|---|
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标1</span> 在册病例数 | 243 | 前台导得出，和病历系统对得上。但只有这一个数，超期数还没有 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标2</span> 延期病例占比 | <span style="font-size:13px;color:#d97706">还不知道</span> | 需先在系统里给每例填「计划结束日期」，再按统计截止日比对 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标3</span> 计划疗程与实际疗程差多少 | 计划 18 个月，已结案的实际均值 20.1 个月 | 口径为拆托槽日期，与 K4 口径必须一致 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标4</span> 平均延期月数 | 在册未结案的 4.5 个月，已结案的 2.1 个月 | 两组数的统计口径不同，必须分别标注 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标5</span> 计划外复诊率 | <span style="font-size:13px;color:#d97706">还不知道</span> | 记录未单列计划外处理，需先加标识字段 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标6</span> 每次占椅位多久、每例来几次 | 每例平均来 20.8 次，椅位时长还不知道 | 椅位时长在挂号本有原始记录但未录入 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标7</span> 重启或二次治疗的比例 | <span style="font-size:13px;color:#d97706">还不知道</span> | 系统无重启标识；医疗主管口径为历史 8 例，不可用 |
+| <span style="display:inline-block;padding:1px 8px;margin:0 2px;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:12px;font-weight:600;white-space:nowrap">指标8</span> 单例就诊次单价 | 收入侧 1385 元一次，成本侧还不知道 | 成本侧缺椅位时长与病例级材料成本 |
 ````
-
-**抄用说明**：
-
-- 面板 E 只写了 3 个动作。实际要**按优先序写全命中的动作**（本例 6 个全命中），每个动作的四个字段照抄 `reference/playbook.md`。
-- 面板 H 的 24 行是固定行数与固定题号，**不得缺行**；跳过的题在判分列写 `未覆盖（受访者跳过）`。
-- frontmatter 的自定义键固定 5 个：`org` / `scale` / `date` / `interviewee` / `evidence`；有未覆盖题时加 `uncovered`。它们会显示在页头 meta 行，用 ASCII 键名加中文值。这是 am 的限制（见 §8 坑 1），**中文标签只出现在面板 A 的 `kv` 里**。
-- **ACT-6 在本例标 `P2`。** 档位只由"挂不挂红线"决定：ACT-6 覆盖 D1/D3/D5/D6，本例没有红线落在这些题号上，所以它是 P2。SKILL.md 的档位表里 ACT-6 写 P1，含义是"它**挂红线时**落到 P1"，不是它在任何情况下都算 P1（该文件已写明这条优先级）。HTML 只显示算出来的档位，**不重新判定档位**。
 
 ---
 
@@ -477,20 +520,19 @@ png  : <out.png>  (2110075 B)
 4. **不要用固定窗口直接截图。** 页面按视口高度排版，直截会在底部留大片空白：1440×4000 窗口直截，内容止于第 2136 行，**底部空白 1863px**；用 `tools/html_to_image.mjs --width 1440 --scale 2` 得到 2880×4330，**底部空白 54px**。
 5. **不加 `--no-open` 会弹浏览器窗口。** 每次渲染都带 `--no-open`。
 6. **省略 `-o` 会写到用户目录** `~/.answer-me-with-html/pages/`，不进你的临时目录，容易找不到。
-7. **面板数与组件统计是自检信号。** 三个已实测的组合：
+7. **面板数与组件统计是自检信号。** 两种情况，都已实测：
 
    | 情形 | 统计行 |
    |---|---|
-   | 有红线命中、无未覆盖题 | `8 panels · kv×1 callout×3 flow×1 timeline×1` |
-   | 无红线命中、无未覆盖题 | `8 panels · kv×1 callout×2 flow×1 timeline×1` |
-   | 有红线命中、有未覆盖题 | `9 panels · kv×1 callout×4 flow×1 timeline×1` |
+   | 四条红线全未命中 | `8 panels · kv×1 callout×2 flow×1` |
+   | 有红线命中 | `8 panels · kv×1 callout×2 flow×1` |
 
-   计数规律：`callout` = 1（结论）+ 1（这周就开始）+ 1（有红线命中时）+ 1（有未覆盖题时）。`kv`/`flow`/`timeline` 各 1，恒不变。对不上就是 draft 少写或多写了面板。
-8. **表格状态格写 `no` 会跳过整行的文字检查**（§6.4）。这是 am 的反例机制，不是 bug。
+   面板数恒为 8；`callout` 恒为 2（结论区一条 + 该做什么开头一条），有红线命中时只是第一条从 `info` 变成 `err`，条数不变。`kv`/`flow` 各 1，恒不变。对不上就是 draft 少写或多写了面板。
+8. **不用 `timeline`**（§3 面板 G）：改成四列表格。timeline 的居中标题会让底下的灰字读不出属于哪一段。
 9. **`--style strict` 会让整页不生成**（§6）。永远用 `--style 80`。
-10. **9 个面板可以，但到此为止。** am 文档的建议上限是 8，实测 9 个正常渲染且无告警；再加内容就**另开一页**，不要挤。
-11. **`kv` 的分隔符支持半角 `:` 和全角 `：`**（实测两种都渲染成键值对）。但 `flow` 的边标签、`timeline` 的字段分隔符只用半角 `|` 和 `:`。
-12. **`timeline` 默认 ≤6 项横向、>6 项纵向**（`am help timeline` 的说明；实测 7 项自动渲染成纵向 `am-timeline--v`），方向也可以用参数强制：`timeline v`。本报告固定写 `timeline v`。
+10. **8 个面板是上限。** 再加内容就**另开一页**，不要挤。
+11. **`kv` 的分隔符支持半角 `:` 和全角 `：`**（实测两种都渲染成键值对）。但 `flow` 的边标签只用半角 `:`。
+12. **行内 `<span>` 保留 `style` 属性**（实测）：大字号、颜色、tag 形状都靠它。不要用 `<div>`、`<style>`、`<script>`，那些会被当作文本显示或拦掉。
 13. **带 BOM 的 draft 能渲染**（实测正常出页），但仍按 UTF-8 无 BOM 落盘，避免别的工具读串。
 14. **写 draft 用 Node 或编辑工具，不要用 PowerShell 5.1 的 `Set-Content -Encoding utf8NoBOM`**：该枚举不存在（只有 `UTF8`，会写 BOM）。例如 `node -e "require('fs').writeFileSync(p, s, 'utf8')"`。
 15. **用 PowerShell 读 draft/产物时加 `-Encoding UTF8`**，否则中文显示乱码（文件本身没问题）。
