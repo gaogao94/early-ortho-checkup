@@ -527,38 +527,44 @@ def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
 
 
 def header_panel(data: dict) -> str:
-    """报告信息：机构名当主角，规模与日期退成次级信息。
+    """报告信息：机构名当标头打底，规模与日期退成次级信息。
 
-    排版按"层次"来，不是三行等重的文字：
-      左侧一道 3px 竖线定住视觉起点 → 机构名 16px 加粗 →
-      规模两小行 13px 灰 → 日期 12px 更浅灰，与上面隔开。
+    排版分两层：
+      第一层 机构名 —— 16px 加粗，下面一条 1px 细线**打底**（把标头托住）；
+      第二层 规模与日期 —— 无序列表（小方块项目符号），一行一条。
 
     两条经验：
-    - 规模那串要**手动拆成两行**（"3 名正畸医生" / "年新接约 180 例"）。
-      不拆的话在这个 260px 宽的栏里会折成"…180 / 例"，孤零零一个"例"字。
-    - 面板占 1 列，990 视口下正好把结论面板放在右边形成"侧栏 + 主栏"。
+    - **机构名必须有"托底"**。裸三行文字里机构名和正文没有区别，看着像没排过版；
+      一条细线就把"这是标题、下面是明细"说清楚了。
+    - 规模那串要**按斜杠拆成两条列表**（"3 名正畸医生" / "年新接约 180 例"）。
+      不拆的话在这个 260–330px 宽的栏里会折成"…180 / 例"，孤零零掉一个"例"字。
+
+    面板占 1 列：990 视口下正好把结论面板放在右边形成"侧栏 + 主栏"。
     """
     org = inline(data["org"])
-    scale = one_line(data["scale"])
     date = inline(data["date"])
+    scale = one_line(data["scale"])
 
-    # 把"3 名正畸医生 / 年新接约 180 例"在斜杠处拆开；拆不开就原样一行
-    parts = [p.strip() for p in scale.split("/") if p.strip()]
-    if len(parts) >= 2:
-        scale_html = "<br>".join(parts)
-    else:
-        scale_html = scale
+    # 项目符号用手写方块，不用 <ul>：am 的列表样式会给 ul 加自己的边距和圆点，
+    # 这里要的是紧凑的两行，用行内 span 控制更稳。
+    def li(text: str) -> str:
+        return (
+            f'<span style="display:block;font-size:12.5px;color:{_C_DIM};'
+            f'line-height:1.85;padding-left:13px;text-indent:-13px">'
+            f'<span style="color:{_C_LINE}">■&nbsp;</span>{text}</span>'
+        )
+
+    items = [p.strip() for p in scale.split("/") if p.strip()]
+    if len(items) < 2:
+        items = [scale]
+    items.append(f"访谈 {date}")
+    bullets = "".join(li(x) for x in items)
 
     return (
         "## 报告信息\n\n"
-        f'<span style="display:block;border-left:3px solid {_C_ACCENT};padding-left:12px">'
-        f'<span style="display:block;font-size:16px;font-weight:700;line-height:1.35">{org}</span>'
-        f'<span style="display:block;font-size:13px;color:{_C_DIM};line-height:1.6;'
-        f'margin-top:4px">{scale_html}</span>'
-        f'<span style="display:block;font-size:12px;color:{_C_DIM};line-height:1.5;'
-        f'margin-top:7px;padding-top:6px;border-top:1px solid {_C_LINE}">'
-        f"访谈 {date}</span>"
-        "</span>\n"
+        f'<span style="display:block;font-size:16px;font-weight:700;line-height:1.35;'
+        f'padding-bottom:7px;border-bottom:1px solid {_C_LINE}">{org}</span>'
+        f'<span style="display:block;margin-top:9px">{bullets}</span>\n'
     )
 
 

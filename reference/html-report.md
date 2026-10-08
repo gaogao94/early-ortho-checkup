@@ -153,7 +153,7 @@ am 会把表格单元格开头的 `ok` / `no` / `warn` 渲染成 ✓ / ✗ / ! �
 **不要手抄这一节。** 生产路径是 `tools/render_report.py`：它从 `report.json` 生成 draft、
 调 am 渲染、导出 PNG。这一节给出的是**它实际产出的样子**，用来对照检查渲染器有没有跑对。
 
-虚构数据：康桥口腔门诊（总分 31、命中 R2/R3/R4、封顶 L1、四维 39/28/39/17）。
+虚构数据：康桥口腔门诊（总分 29、命中 R1/R2/R3/R4、封顶 L1、四维 33/28/39/17）。
 
 生成命令：
 
@@ -380,6 +380,30 @@ am 会自动做"简化技术中文"检查（STE）。默认 `--style 80`：**只
 **为什么禁止 `strict`**：STE 词表把一批常见中文书面词判成套话（`闭环`、`抓手`、`赋能`、`至关重要` 等）。报告文案里只要出现一个，`strict` 就会让**整个报告不出 HTML**。实测：一份含 `闭环` 的 draft 用 `--style strict` 报 `✗ STE check failed (style: strict): 1 warning; no page was written:`，退出码 1。
 
 另一种更彻底的做法是**把套话从源头上换掉**。本 skill 已经这么做过一次：维度 B 原本叫「方案审核与闭环」，改名「方案审核与结案」之后这条警告就不存在了（`结案` 是具体动作，读的人也懂）。剩下的词表命中来自受访者原话时，保留原话。
+
+### STE 警告走的是 **stdout**，不是 stderr
+
+写验收脚本时踩过这个坑：`render_report.py ... 2> render.txt` 会得到一个**空文件**，
+因为 am 的 STE 输出走的是标准输出。拿到空文件的检查器会报"0 条警告、全部通过" —— **假绿**。
+
+正确接法（两个流都接）：
+
+```bash
+python tools/render_report.py report.json -o out.html > render.txt 2>&1
+python tools/check_ste_allowlist.py render.txt report.json
+```
+
+### 验收：允许清单
+
+`tools/check_ste_allowlist.py` 把"可接受的 STE 警告"写成清单，其余一律判失败。
+目前只允许两类：
+
+| 规则 | 条件 | 为什么可接受 |
+|---|---|---|
+| `paragraph-length` | 落在结论大字行上 | am 把 `；` 当句末、且只剥标签不剥 `&nbsp;`，把一行大字切成 7 段 —— 误报 |
+| `word`「大概」 | 该词出现在**受访者原话**里 | 原话不得改写；同一词若出现在依据或正文里则**不算可接受** |
+
+改这份清单必须同时在 `reference/html-report.md`（本节）说明为什么可接受。
 
 ### 三条处置规则
 
@@ -620,7 +644,26 @@ am 的运行时会把布局整个改写成行内样式，只看样式表会得�
 占满整宽会把结论挤到下一行，那份报告的视觉重心就没了。
 
 实现见 `tools/render_report.py` 的 `header_panel()` —— 整块用行内 `<span>` 手写，
-因为要控制字号/颜色/竖线/细线，Markdown 表达不了这层排版。
+因为要控制字号/颜色/小方块项目符号/打底细线，Markdown 表达不了这层排版。
+
+### 已知的 STE 误报：结论大字行
+
+`am` 的 STE 检查会把结论面板那行大字（等级 + 等级名 + 分数）报成
+`paragraph-length: paragraph has 7 sentences (max 6)`。**这是误报，不要为了消它去改版式。**
+
+原因在 am 的切句正则里：它把中文分号 `；` 也算句末（`[。！？；!?;]`），
+而它的 `clean()` 会剥掉 `<span>` 标签但留着 `&nbsp;`，于是一行
+
+```
+<span …>L1</span>&nbsp;&nbsp;&nbsp;<span …>无标准</span>&nbsp;&nbsp;&nbsp;<span …>29 分</span>
+```
+
+被切成了 7 段。
+
+**这个警告可以接受**：一行大字确实不是段落，把它拆成"合规"的写法只会毁掉版面。
+验收口径里把这一条记为已知误报；除它之外 STE 应当 0 警告。
+
+（正文段落真的超过 6 句是另一回事——那种要改，见 `reference/writing-style.md`。）
 
 ### HTML 与 PNG 的清理（四道，两边都要做）
 

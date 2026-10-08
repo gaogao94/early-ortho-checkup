@@ -135,8 +135,7 @@ function stripColophon(html) {
   return html.replace(/<footer class="am-colophon">[\s\S]*?<\/footer>/g, "");
 }
 
-// ---- 0b) 统一字体 ----------------------------------------------------------
-// am 的 base CSS 把表头 (.am-md th)、键值标签 (.am-kv dt)、面板角标 (.am-panel-meta)
+// ---- 0b) 统一字体 ----------------------------------------------------------// am 的 base CSS 把表头 (.am-md th)、键值标签 (.am-kv dt)、面板角标 (.am-panel-meta)
 // 都设成等宽字体 `font: 11px/1.3 var(--font-mono)`。中文报告里这会让"等级""这一档的样子"
 // 这些中文标签显示成外挂字形，整页看起来有两种字体。
 // 这里只覆盖 font-family，字号/行高/颜色不动；code/pre/kbd 继续用等宽。
