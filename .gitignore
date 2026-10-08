@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local data (never commit real clinic data)
+*.csv
+*.xlsx
+*.xls
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
