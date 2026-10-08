@@ -21,6 +21,9 @@
 | 评分 | 每题 0 / 1 / 2 / 3 分；维度分 = 该维度 6 题之和 ÷ 18 × 100；总分 = 四个维度分的平均（均四舍五入取整） |
 | 定级 | L1 医生自治 / L2 起步 / L3 运转中 / L4 体系化；**命中红线会降级封顶** |
 | 产出 | 一份《早矫管理体检报告》：等级、红线诊断、逐题证据、改进动作、90 天路线图、K1–K8 指标表 |
+| 呈现 | 同一份报告三种形态：**Markdown**（对话里直接读）、**shadcn 风格单页 HTML**（点开/转发/打印）、**PNG 图片**（发微信、贴 PPT） |
+
+报告默认同时产出一页 HTML——它是给老板、合伙人、门店管理层看的东西，一页能点开、能转发的页面比一段聊天记录有用得多。三种形态内容一致，只是呈现方式不同。
 
 访谈纪律（这也是它和"发一张问卷"的区别）：
 
@@ -62,12 +65,27 @@ git clone https://github.com/gaogao94/early-ortho-checkup.git ~/.claude/skills/e
 
 | 文件 | 作用 |
 |---|---|
-| [`SKILL.md`](SKILL.md) | 主流程、一题一问循环、**评分规则**、报告模板 |
+| [`SKILL.md`](SKILL.md) | 主流程、一题一问循环、**评分规则**、报告模板、HTML 出页步骤 |
 | [`reference/question-bank.md`](reference/question-bank.md) | **题库**：24 题的题干、探针意图、0/1/2/3 锚点 |
 | [`reference/playbook.md`](reference/playbook.md) | **改进手册**：ACT-1 – ACT-6 的落地动作 + 90 天路线图 |
+| [`reference/html-report.md`](reference/html-report.md) | **HTML 报告约定**：面板映射、组件语法、状态徽章、shadcn 主题 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 设计说明：为什么是这四个维度、为什么要设红线、已知局限 |
 | [`docs/example-run.md`](docs/example-run.md) | 一次完整运行的样例（也是本 skill 的自测样例）：一题一问片段、24 题判分账目、红线降级实算、动作优先序、K1–K8 的"未知即结论"处理；机构与数据全部虚构 |
 | [`tools/early_ortho_metrics.py`](tools/early_ortho_metrics.py) | 可选：拿一张脱敏 CSV 自查 K1–K8 里能算的部分 |
+| [`tools/render_report.py`](tools/render_report.py) | 把报告 JSON 渲染成 shadcn 风格单页 HTML（`--png` 同时出图） |
+| [`tools/html_to_image.mjs`](tools/html_to_image.mjs) | HTML → PNG：先测真实内容高度再截图，避免底部留大片空白 |
+
+### HTML 报告依赖
+
+单页 HTML 由 [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html) 的 `am` CLI 负责版式与组件渲染，本仓库只提供报告规范与数据转换，不重复造排版轮子。
+
+```bash
+git clone https://github.com/QingYunA/answer-me-with-html.git ~/.answer-me-with-html/am
+export AM_CLI=~/.answer-me-with-html/am/skills/answer-me-with-html/scripts/am.mjs
+python tools/render_report.py report.json --png --am "$AM_CLI"
+```
+
+只想要 Markdown 报告、不装 `am` 也能完整使用本 skill——HTML 只是多一种呈现。第一次跑 HTML 前用 `python tools/render_report.py --help` 看默认路径。
 
 ---
 
