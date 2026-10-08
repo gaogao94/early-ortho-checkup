@@ -8,8 +8,15 @@
  * exactly that height.
  *
  * Usage:
- *   node html_to_image.mjs <page.html> [-o out.png] [--width 1440] [--scale 2]
- *                           [--browser <path>] [--pad 0]
+ *   node html_to_image.mjs <page.html> [-o out.png] [--css-width 990] [--scale 2]
+ *                           [--browser <path>] [--pad 0] [--min 900] [--max 40000]
+ *
+ * --css-width is the CSS viewport width and it is the knob that matters: it decides
+ * both the layout (am collapses the 3-column grid below 1100px) and how legible the
+ * text ends up. Default 990 comes from working backwards from the reading width: a
+ * 1980px image (990 x 2) shown at about 990px is 1:1, so 13px body text stays 13px.
+ * Widening the viewport widens the image, which then gets scaled down harder:
+ * a 1710px viewport yields 3420px, shown at 990px that is 58%, i.e. 7.5px text.
  *
  * Prints one line: "<out.png>  <w>x<h>  <bytes> B"
  */
@@ -17,6 +24,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+//: Chrome 在非 hide-scrollbars 模式下给滚动条留的宽度（实测 18px）。
+//: 要让 CSS 视口正好是 N，窗口宽得传 N + 18。
+const SCROLLBAR_PX = 18;
 
 const BROWSERS = [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -29,15 +40,23 @@ const BROWSERS = [
 ];
 
 function parseArgs(argv) {
-  // 默认宽度 1728：am 的页面在 1100px 断点以下会把 3 列塌成 2 列、760px 以下塌成 1 列。
-  // 用 1440 截图会让 PNG 的排版和浏览器里看到的不一样（A、B 从并排变成上下）。
-  // 1728 让 .am-sheet 撑满它的 1680px 上限，和常见的 1920 宽屏浏览器一致。
-  const a = { out: null, width: 1728, scale: 1.5, browser: null, pad: 0, min: 900, max: 20000 };
+  // 默认 CSS 视口 990px、2 倍图（1980px 宽）。
+  //
+  // 为什么是 990 而不是更宽：这个宽度下 am 的 grid 是 3 列，各面板按 span 排成
+  // "侧栏 + 主栏"的版式（报告信息在左、结论在右）。更关键的是字号——1980px 的图
+  // 在常见阅读宽度（约 990px）下是 1:1 显示，13px 正文就是 13px，清晰。
+  // 视口越宽，导出的图越宽，被压得越狠：1710px 视口出 3420px 的图，缩到 990
+  // 只有 58%，13px 正文变成 7.5px，糊得看不清。
+  //
+  // --width 是 Chrome 的窗口宽；--css-width 是想要的 CSS 视口宽（Chrome 有
+  // 18px 滚动条宽度差，所以窗口宽 = CSS 视口宽 + 18）。
+  const a = { out: null, width: null, cssWidth: 990, scale: 2, browser: null, pad: 0, min: 900, max: 40000 };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
     if (t === "-o" || t === "--out") a.out = argv[++i];
     else if (t === "--width") a.width = Number(argv[++i]);
+    else if (t === "--css-width") a.cssWidth = Number(argv[++i]);
     else if (t === "--scale") a.scale = Number(argv[++i]);
     else if (t === "--browser") a.browser = argv[++i];
     else if (t === "--pad") a.pad = Number(argv[++i]);
@@ -45,6 +64,8 @@ function parseArgs(argv) {
     else if (t === "--max") a.max = Number(argv[++i]);
     else rest.push(t);
   }
+  // --width 优先级更高，直接把窗口宽当结果；否则用 CSS 视口宽换算
+  a.windowWidth = a.width != null ? a.width : a.cssWidth + SCROLLBAR_PX;
   a.input = rest[0];
   return a;
 }
@@ -58,18 +79,22 @@ if (process.argv.includes("-h") || process.argv.includes("--help")) {
 本工具先用 --dump-dom 量出真实内容高度，再按这个高度截图。
 
 用法：
-  node html_to_image.mjs <page.html> [-o out.png] [--width 1728] [--scale 1.5] [--pad 0]
-                                     [--browser <chrome|edge 路径>] [--min 900] [--max 20000]
+  node html_to_image.mjs <page.html> [-o out.png] [--css-width 990] [--scale 2] [--pad 0]
+                                     [--browser <chrome|edge 路径>] [--min 900] [--max 40000]
 
 参数：
   <page.html>     输入页面（必填）
   -o, --out       输出 PNG；默认与输入同名 .png
-  --width         视口宽度（CSS px），默认 1728
-                  不要随便调小：am 的页面在 1100px 以下把 3 列塌成 2 列，
-                  PNG 就会和浏览器里看到的排版不一致（A、B 从并排变成上下）
-  --scale         设备像素倍率，默认 1.5（1728 → 2592px 宽，长图体积约为 2 倍图的一半）
+  --css-width     CSS 视口宽度，默认 990。**这个值同时决定排版和字清不清楚**
+                  990 是按"图缩到常见阅读宽度时字号 1:1"反推的：1980px 的图
+                  （990 × 2）在约 990px 宽阅读时是原生大小，13px 正文就是 13px。
+                  不要随便调大：视口越宽，导出的图越宽、被压得越狠。
+                  1710px 视口出 3420px 的图，缩到 990 只剩 58%，13px 正文变 7.5px。
+                  也不要低于 1100 太多：am 在 1100px 以下把 grid 从 3 列塌成 2 列。
+  --width         Chrome 窗口宽度；给了它就忽略 --css-width（两者差 18px 滚动条）
+  --scale         设备像素倍率，默认 2
   --pad           内容高度额外补白（px），默认 0
-  --min / --max   高度上下限，默认 900 / 20000
+  --min / --max   高度上下限，默认 900 / 40000
   --browser       显式指定 Chrome 或 Edge；默认自动探测
   -h, --help      显示本帮助
 
@@ -151,7 +176,7 @@ try {
   const dom = execFileSync(
     browser,
     ["--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
-     `--window-size=${args.width},1200`, "--virtual-time-budget=9000", "--dump-dom",
+     `--window-size=${args.windowWidth},1200`, "--virtual-time-budget=9000", "--dump-dom",
      "file:///" + probe.replace(/\\/g, "/").replace(/^\//, "")],
     { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "ignore"] },
   );
@@ -176,7 +201,7 @@ try {
   execFileSync(
     browser,
     ["--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
-     `--force-device-scale-factor=${args.scale}`, `--window-size=${args.width},${Math.ceil(height)}`,
+     `--force-device-scale-factor=${args.scale}`, `--window-size=${args.windowWidth},${Math.ceil(height)}`,
      "--virtual-time-budget=9000", `--screenshot=${out}`,
      "file:///" + shotSrc.replace(/\\/g, "/").replace(/^\//, "")],
     { stdio: ["ignore", "ignore", "ignore"], maxBuffer: 1 << 28 },
@@ -190,6 +215,6 @@ if (!existsSync(out)) {
   process.exit(1);
 }
 const bytes = statSync(out).size;
-console.log(`${out}  ${args.width * args.scale}x${height * args.scale}  ${bytes} B`);
+console.log(`${out}  ${args.windowWidth * args.scale}x${Math.ceil(height * args.scale)}  ${bytes} B`);
 console.log(`  浏览器 ${browser}`);
-console.log(`  内容框 main: ${measure.mainH}px（top ${measure.mainTop}px）· 文档高 ${measure.docH}px · 窗口 ${args.width}x${height} · 倍率 ${args.scale}`);
+console.log(`  内容框 main: ${measure.mainH}px（top ${measure.mainTop}px）· 文档高 ${measure.docH}px · CSS 视口 ${args.cssWidth}px · 窗口 ${args.windowWidth}x${height} · 倍率 ${args.scale}`);

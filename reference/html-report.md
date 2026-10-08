@@ -467,8 +467,8 @@ node "%TEMP%\amwh\skills\answer-me-with-html\scripts\am.mjs" render "<draft.md>"
 node "<skill 仓库>\tools\html_to_image.mjs" "<out.html>" -o "<out.png>"
 ```
 
-**不要传 `--width`。** 默认值是 **1728 CSS 宽 / 1.5 倍**，得到 2592 像素宽的图。
-原因见下面的"视口宽度与分栏"——写小了导出的图会和浏览器里看到的排版不一样。
+**不要传 `--width`。** 默认是 **990 CSS 视口宽 / 2 倍**，得到 2016 像素宽的图。
+这个默认值是按"图缩到阅读宽度时字号 1:1"反推的，理由见下面两节。
 
 3. **只检查不改页**（写 draft 时反复用，比渲染快）：
 
@@ -476,7 +476,7 @@ node "<skill 仓库>\tools\html_to_image.mjs" "<out.html>" -o "<out.png>"
 node "%TEMP%\amwh\skills\answer-me-with-html\scripts\am.mjs" lint "<draft.md>"
 ```
 
-### 视口宽度与分栏
+### 视口宽度：决定排版，也决定字清不清楚
 
 am 的页面有两处响应式断点，**1100px 以下 grid 从 3 列塌成 2 列**，760px 以下塌成 1 列：
 
@@ -486,15 +486,40 @@ am 的页面有两处响应式断点，**1100px 以下 grid 从 3 列塌成 2 �
 @media (max-width: 760px)  { .am-grid { grid-template-columns: minmax(0, 1fr); } }
 ```
 
-所以**截图宽度必须大于 1100px**，否则 A、B 两个面板从并排变成上下，PNG 和浏览器里的 HTML 就成了两份东西。实测对照（同一份 HTML）：
+断点只是第一层。真正决定成品能不能读的是**图片宽度与阅读宽度的比值**——图越宽，被缩放得越狠，字号越小：
 
-| 窗口宽 | CSS 视口 | grid 列数 | 结果 |
+| CSS 视口 | 2 倍图实际像素宽 | 缩到 990px 阅读时 | 13px 正文的等效高度 |
 |---|---|---|---|
-| 1152 | 1134 | 3 | 可用，但接近断点 |
-| 1440 | 1422 | 3 | 可用 |
-| 1728 | 1710 | 3 | **默认值**，`.am-sheet` 撑满 1680px 上限 |
+| 990 | 2016 | 49% | **13.0px**（原生） |
+| 1422 | 2880 | 34% | 9.0px |
+| 1710 | 3456 | 29% | **7.5px**（糊） |
 
-`.am-sheet` 有 `max-width: 1680px`，所以窗口超过约 1736px 之后画面不再变宽。默认 1728 正好贴着这个上限，和常见的 1920 宽屏浏览器一致。
+所以默认取 **990**：1980～2016px 的图在常见阅读宽度下接近 1:1，13px 正文就是 13px。
+把它加宽到 1710 会让排版从"侧栏 + 主栏"变成三栏，但图宽翻倍、缩下来字号只剩 58%，
+**得不偿失**——这是实测踩过的坑。
+
+990 下各面板的实际排布（实测，`--cols 3` + span 的结果）：
+
+```
+报告信息(1)  结论(2)          ← 侧栏 + 主栏
+分数与等级(3)
+四条红线 / 逐题明细 / 该做什么 / 90 天 / 八个关键数字   ← 各自占满
+```
+
+即高度是 4412px（比 1710 视口下的 2839px 高，但每一行都读得清）。
+
+### `--window-size` 与 CSS 视口的 18px 差值
+
+Chrome 的 `--window-size` 不是 CSS 视口宽：**CSS 视口 = 窗口宽 − 18px**（滚动条）。实测：
+
+| `--window-size` | CSS 视口 |
+|---|---|
+| 990 | 972 |
+| **1008** | **990** ← 脚本内部用这个 |
+| 1018 | 1000 |
+
+`html_to_image.mjs` 的 `--css-width` 帮你把这一步算好（内部传 `cssWidth + 18`）。
+要直接用窗口宽就传 `--width`，它优先于 `--css-width`。
 
 ### HTML 与 PNG 的清理（两步，两边都要做）
 
@@ -534,7 +559,7 @@ $ "C:\Program Files\nodejs\node.EXE" ...\am.mjs render ...\report.draft.md -o ..
   STE 1 warning (fix the draft and run again):
   L132 [word] not recommended: "大概" → use "约" in descriptions, a value in steps
 html : <out.html>  (112752 B)
-$ "C:\Program Files\nodejs\node.EXE" tools\html_to_image.mjs <out.html> -o <out.png> --width 1440 --scale 2
+$ "C:\Program Files\nodejs\node.EXE" tools\html_to_image.mjs <out.html> -o <out.png> --css-width 990 --scale 2
 <out.png>  2880x7560  2110075 B
   浏览器 C:/Program Files/Google/Chrome/Application/chrome.exe
   内容框 main: 3749px（top 0px）· 文档高 3789px · 窗口 1440x3789 · 倍率 2
@@ -554,7 +579,7 @@ png  : <out.png>  (2110075 B)
   内容框 main: 2125px（top 0px）· 文档高 2165px · 窗口 1440x2165 · 倍率 2
 ```
 
-`--width 1440 --scale 2` 得到 2880 像素宽的图，足够微信转发与打印。
+`--css-width 990 --scale 2` 得到 2016 像素宽的图；缩到 990px 阅读时字号是原生的，微信转发清楚。
 
 ---
 
@@ -565,7 +590,7 @@ png  : <out.png>  (2110075 B)
    键改成 `org:` 即可；**值可以是中文**（`title: 早矫管理体检报告` 正常）。
 2. **`flow` 的方括号只有包住整个节点名时才是形状。** `A[ACT-2 P0]` 会原样显示成节点文字 `A[ACT-2 P0]`；`ACT2(ACT-2 P0)` 同理显示 `ACT2(ACT-2 P0)`。正确写法二选一：整段包住 → `(ACT-2 P0)`（圆角，显示 `ACT-2 P0`）；或直接用裸节点名 → `ACT-2`。方括号 `[文字]` 是矩形、`{文字}` 是菱形、`[(文字)]` 是柱体，都要求**整段**包住。
 3. **`html_to_image.mjs` 没有 `--help`。** `--help` 会被当成输入文件：`✗ 找不到文件: D:\周五直播\--help`。用法看该文件头部注释。
-4. **不要用固定窗口直接截图。** 页面按视口高度排版，直截会在底部留大片空白：1440×4000 窗口直截，内容止于第 2136 行，**底部空白 1863px**；用 `tools/html_to_image.mjs --width 1440 --scale 2` 得到 2880×4330，**底部空白 54px**。
+4. **不要用固定窗口直接截图。** 页面按视口高度排版，直截会在底部留大片空白：1440×4000 窗口直截，内容止于第 2136 行，**底部空白 1863px**；用 `tools/html_to_image.mjs`（先测量再按实际高度截）**底部空白 54px**。
 5. **不加 `--no-open` 会弹浏览器窗口。** 每次渲染都带 `--no-open`。
 6. **省略 `-o` 会写到用户目录** `~/.answer-me-with-html/pages/`，不进你的临时目录，容易找不到。
 7. **面板数与组件统计是自检信号。** 两种情况，都已实测：
@@ -671,7 +696,7 @@ C:\Users\admin\AppData\Local\Temp\1\amwh_probe\final\early-ortho-report.png  288
   L12 [cliche] cliché "闭环" → delete it or state a concrete fact
 ```
 
-**CMD12 · 固定窗口直截 vs 自带出图工具**（坑 4）：`--window-size=1440,4000` 直截 → 1440×4000，内容止于第 2136 行，底部空白 1863px；自带工具 `--width 1440 --scale 2` → 2880×4330，内容止于第 4275 行，底部空白 54px（用 Pillow 逐行扫描非背景像素测得）。
+**CMD12 · 固定窗口直截 vs 自带出图工具**（坑 4）：`--window-size=1440,4000` 直截 → 1440×4000，内容止于第 2136 行，底部空白 1863px；自带工具（先测量再截）→ 底部空白 54px（用 Pillow 逐行扫描非背景像素测得）。当时用的宽度参数已过时，见 §7「视口宽度」。
 
 **CMD13 · STE 词表与长度规则**（§6.1 / §6.2）：逐词单行草稿的 `am lint` 输出，共 12 条警告，覆盖 `闭环` ×2、`尽快`、`若干`、`大概`、`多次`、`进行复核`、`加以说明`、`至关重要`、`赋能`、`抓手`、`颗粒度`；长度规则用 58 字含逗号段落（报 `sentence has 56 characters (max 45)`）与 54 字有序列表项（报 `step has 54 characters (max 35)`）确认按行计数、标点不计入。
 
