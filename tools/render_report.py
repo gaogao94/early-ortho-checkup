@@ -105,6 +105,15 @@ SCORE_BANDS = (
     (81, 100, "ok", "L4 档"),
 )
 
+#: 等级看板的四行。等级名要让人一眼看懂处境，不用抽象名词——
+#: "运转中" 这种自造词读者猜不出含义，是用户明确反馈过的问题。
+LEVEL_BANDS = (
+    ("L1", 0, 30, "无标准", "没有标准、没有计划时长、没有账，全凭医生个人"),
+    ("L2", 31, 55, "刚起步", "有零散做法，但不留痕、不可复算"),
+    ("L3", 56, 80, "有体系", "有标准能执行、数据可查，结案复核还有缺口"),
+    ("L4", 81, 100, "能自转", "标准、审核、留痕、复核、激励、财务全部到位"),
+)
+
 UNKNOWN_PREFIX = "未知"
 
 #: am CLI 的默认位置（%TEMP% 在 Windows 上可能是 ...\Temp\1，所以两个都试）
@@ -342,39 +351,64 @@ def header_panel(data: dict) -> str:
     return "## 报告头\n\n```kv cols=2\n" + "\n".join(rows) + "\n```\n"
 
 
+def level_gauge(current: str, raw: int) -> str:
+    """把 L1–L4 画成一条刻度，当前等级标出来。
+
+    这是报告里唯一需要"一眼看懂处境"的地方：读者先看到自己站在四档里的哪一档，
+    再看细节。所以用表格加状态词，不用抽象图形。
+    """
+    lines = [
+        "| 等级 | 分数区间 | 这个等级的样子 | |",
+        "|---|---|---|---|",
+    ]
+    for lid, low, high, name, desc in LEVEL_BANDS:
+        # 表头那一列留空，标记只写字不写符号，避免在窄栏里被拆成两行
+        here = "ok 你在这里" if lid == current else ""
+        lines.append(f"| **{lid} {name}** | {low}–{high} 分 | {desc} | {here} |")
+    lines.append("")
+    lines.append(f"**总分 {raw}／100，等级 {current}。**")
+    return "\n".join(lines)
+
+
 def headline_panel(data: dict) -> str:
     headline = data["headline"]
     level = one_line(headline["level"])
     level_name = one_line(headline["level_name"])
     raw = int(headline["raw_score"])
     capped = one_line(headline["capped_reason"])
+
     out = [
-        "## 一、一句话结论",
+        "## 结论",
         "",
-        f"```callout info {level} {level_name}（原分 {raw}/100）",
+        "```callout info " + level + " " + level_name + " · 总分 " + str(raw) + "／100",
         one_line(headline["summary"]),
         "```",
     ]
     if capped:
-        out += ["", "```callout err 红线降级", capped, "```"]
+        # 提示语本身不承载信息时删掉，直接说事（去 AI 味规则第 5 条）
+        out += ["", "```callout err 红线把等级压住了", capped, "```"]
     return "\n".join(out) + "\n"
 
 
-def uncovered_panel(data: dict) -> str:
-    uncovered = data["uncovered"]
-    if not uncovered:
-        return ""
-    listed = "、".join(one_line(x) for x in uncovered)
-    body = f"本题未覆盖：{listed}，该维度证据不足。"
-    return "\n## 未覆盖题提示\n\n```callout warn 证据强度\n" + body + "\n```\n"
+def score_panel(data: dict) -> str:
+    headline = data["headline"]
+    level = one_line(headline["level"])
+    raw = int(headline["raw_score"])
+    return (
+        # span=2 比 span=3 更紧凑：独占一行会把页面拉高约 1500px，而 2 列宽
+        # 已经够放四档刻度和维度表（实测表头不会断行）。
+        "## 分数与等级 {span=2}\n\n"
+        + level_gauge(level, raw)
+        + "\n\n"
+        + "### 四个维度各得多少\n\n"
+        + dimensions_table(data)
+    )
 
 
-def dimensions_panel(data: dict) -> str:
+def dimensions_table(data: dict) -> str:
     headline = data["headline"]
     lines = [
-        "## 二、四维得分",
-        "",
-        "| 维度 | 得分 | 该维度最大的缺口 |",
+        "| 维度 | 得分 | 这个维度最大的缺口 |",
         "|---|---|---|",
     ]
     scores = []
@@ -383,29 +417,41 @@ def dimensions_panel(data: dict) -> str:
         scores.append(int(dim["score"]))
         lines.append(
             f"| {cell(dim['id'])} {cell(dim['name'])} "
-            f"| {status} {fmt_score(dim['score'])}（{label}） "
+            f"| {status} {fmt_score(dim['score'])} {label} "
             f"| {cell(dim['gap'])} |"
         )
     avg = round(sum(scores) / len(scores)) if scores else 0
     lines.append(
-        f"| **总分** | **原分 {int(headline['raw_score'])}/100**（维度均值 {avg}） | 原分不因红线改写 |"
+        f"| **总分** | **{int(headline['raw_score'])}/100**（四个维度的平均是 {avg}） "
+        f"| 总分不因为红线改写 |"
     )
     lines += [
         "",
-        f"> 总分栏显示原分（画像），等级栏显示封顶后的等级（判断）："
-        f"当前等级 {one_line(headline['level'])} {one_line(headline['level_name'])}。",
+        f"> 总分是画像，等级是判断。你现在的等级是 "
+        f"{one_line(headline['level'])} {one_line(headline['level_name'])}。",
     ]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines)
+
+
+def uncovered_panel(data: dict) -> str:
+    uncovered = data["uncovered"]
+    if not uncovered:
+        return ""
+    listed = "、".join(one_line(x) for x in uncovered)
+    return (
+        "\n## 证据强度\n\n```callout warn 有题没答\n"
+        + f"{listed} 这几题受访者跳过了。跳过不计 0 分也不计满分，该维度的分数仅供参考。"
+        + "\n```\n"
+    )
 
 
 def redlines_panel(data: dict) -> str:
     lines = [
-        "## 三、红线诊断",
+        "## 四条红线 {span=2}",
         "",
         "| 红线 | 结论 | 依据（题号 + 受访者原话） |",
         "|---|---|---|",
     ]
-    hits = []
     for red in data["redlines"]:
         status = VERDICT_STATUS[red["verdict"]]
         lines.append(
@@ -413,18 +459,12 @@ def redlines_panel(data: dict) -> str:
             f"| {status} {cell(red['verdict'])} "
             f"| {cell(red['basis'])} |"
         )
-        if red["verdict"] == "命中":
-            hits.append(f"{one_line(red['id'])} {one_line(red['name'])}")
-        elif red["verdict"] == "信息不足":
-            hits.append(f"{one_line(red['id'])} {one_line(red['name'])} 因信息不足未判")
-    # 不再在这里补一个 callout：命中的红线已经出现在表里的状态词（✗）与
-    # 面板 B2 的 callout err 中，第三次重复只是噪音。红线命中的信号由 B2 承载。
     return "\n".join(lines) + "\n"
 
 
 def answers_panel(data: dict) -> str:
     lines = [
-        "## 四、逐题明细 {span=2}",
+        "## 逐题明细 {span=2}",
         "",
         "| 题号 | 判分 | 受访者关键原话 | 判分依据 |",
         "|---|---|---|---|",
@@ -443,13 +483,16 @@ def answers_panel(data: dict) -> str:
             f"| {cell(ans['id'])} | {status} {score}/3 | {cell(ans['quote'])} | {cell(ans['basis'])} |"
         )
     uncovered = [a["id"] for a in data["answers"] if a["score"] is None]
-    tail = (
-        f"其中 {len(uncovered)} 题未覆盖（{'、'.join(uncovered)}），既不计 0 分也不计满分，"
-        "该维度证据强度受影响。"
-        if uncovered
-        else ""
-    )
-    lines += ["", f"> 共 {len(data['answers'])} 题。状态词：✓ 3 分 · ! 1–2 分 · ✗ 0 分。{tail}"]
+    tail = ""
+    if uncovered:
+        tail = (
+            f"其中 {'、'.join(uncovered)} 未覆盖，既不计 0 分也不计满分，"
+            "该维度的证据强度因此弱一些。"
+        )
+    lines += [
+        "",
+        f"> 共 {len(data['answers'])} 题。✓ 是 3 分，! 是 1–2 分，✗ 是 0 分。{tail}",
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -481,43 +524,53 @@ def priority_flow(actions: list) -> str:
 
 def actions_panel(data: dict) -> str:
     actions = sort_actions(data["actions"])
-    out = ["## 五、优先改进动作 {span=2}", ""]
-    for i, act in enumerate(actions, start=1):
-        out += [
-            f"### {i}. {one_line(act['id'])} {one_line(act['name'])}"
-            f"【{one_line(act['tier'])}】（缺口题号：{one_line(act['gap_ids'])}）",
-            "",
-            f"- **现状**：{one_line(act['now'])}",
-        ]
-        if act["todo"]:
-            out += ["- **要做的事**：", ""]
-            out += [f"{j}. {one_line(step)}" for j, step in enumerate(act["todo"], start=1)]
-            out.append("")
-        out += [
-            f"- **验收标准**：{one_line(act['accept'])}",
-            f"- **预计见效时间**：{one_line(act['eta'])}",
-            "",
-        ]
+    out = ["## 该做什么，按先后排 {span=2}", ""]
+
+    # 下一步并进这一节开头：原来它是独立一节，和这里的动作列表说的是同一件事
+    steps = data["next_steps"]
+    if steps:
+        body = "\n".join(f"{i}. {one_line(s)}" for i, s in enumerate(steps, start=1))
+        out += ["```callout warn 这周就开始", body, "```", ""]
+
     if actions:
         out += [
-            "### 优先序",
-            "",
             "```flow LR",
             priority_flow(actions),
             "```",
+            "",
+            f"> 一共 {len(actions)} 个动作。P0 先做，P1 跟上，P2 排在后面。",
+            "",
+        ]
+
+    for i, act in enumerate(actions, start=1):
+        out += [
+            f"### {i}. {one_line(act['id'])} {one_line(act['name'])}"
+            f" · {one_line(act['tier'])} · 缺口题号 {one_line(act['gap_ids'])}",
+            "",
+            one_line(act["now"]),
+            "",
+        ]
+        if act["todo"]:
+            out += [f"{j}. {one_line(step)}" for j, step in enumerate(act["todo"], start=1)]
+            out.append("")
+        out += [
+            f"做到这一步算完成。{one_line(act['accept'])}",
+            "",
+            f"预计 {one_line(act['eta'])}。",
+            "",
         ]
     return "\n".join(out) + "\n"
 
 
 def roadmap_panel(data: dict) -> str:
     # span=2：四段周次的标题与交付说明在 1/3 宽列里会被压成竖排单字
-    lines = ["## 六、90 天路线图 {span=2}", "", "```timeline"]
+    lines = ["## 90 天怎么排 {span=2}", "", "```timeline"]
     for row in data["roadmap"]:
         weeks = inline(row["weeks"])
         action = inline(row["action"])
         deliverable = inline(row["deliverable"])
         accept = inline(row["accept"])
-        note = f"交付：{deliverable} ｜ 验收：{accept}"
+        note = f"交付 {deliverable} ｜ 验收 {accept}"
         lines.append(f"{weeks} | {action} | {note}")
     lines.append("```")
     return "\n".join(lines) + "\n"
@@ -526,9 +579,9 @@ def roadmap_panel(data: dict) -> str:
 def metrics_panel(data: dict) -> str:
     # span=2：三列表格放进 1/3 宽的列会被压成逐字换行，必须给足宽度
     lines = [
-        "## 七、八个关键指标 {span=2}",
+        "## 八个关键数字 {span=2}",
         "",
-        "| 指标 | 数值 | 说明 / 取证方式 |",
+        "| 指标 | 数值 | 从哪来 |",
         "|---|---|---|",
     ]
     unknown_count = 0
@@ -544,31 +597,57 @@ def metrics_panel(data: dict) -> str:
                 f"| {cell(metric['id'])} {cell(metric['name'])} "
                 f"| ok {cell(metric['value'])} | {cell(metric['note'])} |"
             )
-    lines += ["", f"> 共 {len(data['metrics'])} 个指标，其中 {unknown_count} 个为「未知」。"]
+    total = len(data["metrics"])
+    lines += ["", f"> 八个数字里，{total - unknown_count} 个拿到了，{unknown_count} 个还不知道。"]
+
+    def plain(name: str) -> str:
+        """指标名说人话。
+
+        "计划 vs 实际时长" 不是指标名——读者拿不到"多少"这个量。斜杠也一并去掉：
+        "A / B" 读起来像两个东西，其实是一个指标的两个面，用顿号更自然。
+        按最长匹配优先，避免 "实际时长" 里的 "时长" 先被替换。
+        """
+        fixes = (
+            ("计划 vs 实际时长", "计划疗程与实际疗程差多少"),
+            ("计划 vs 实际", "计划与实际"),
+            ("椅位时长 / 每例次数", "每次占椅位多久、每例来几次"),
+            ("重启率 / 二次治疗率", "重启或二次治疗的比例"),
+            (" / ", "、"),
+        )
+        for old, new in fixes:
+            name = name.replace(old, new)
+        return name
+
+    # 指标名在这里统一做一次可读化，避免上游 JSON 里出现看不懂的写法。
+    # 表格拆开后：parts[0]=''、parts[1]=指标名、parts[2]=数值、parts[3]=来源。
+    for i, line in enumerate(lines):
+        if line.startswith("| K"):
+            parts = line.split("|")
+            if len(parts) >= 4:
+                parts[1] = " " + plain(parts[1].strip()) + " "
+                lines[i] = "|".join(parts)
+
     if unknown_count:
-        lines.append("> 任何「未知」都必须给出取证方式：查哪个系统的哪个字段，或补哪一步现场记录。**不估算、不用行业均值填充。**")
+        lines.append(
+            "> 每个「未知」都写清了该去哪张报表取数。不估算，也不用行业均值顶替。"
+        )
     return "\n".join(lines) + "\n"
 
 
-def next_steps_panel(data: dict) -> str:
-    body = "\n".join(
-        f"{i}. {one_line(step)}" for i, step in enumerate(data["next_steps"], start=1)
-    )
-    return "## 八、下一步\n\n```callout warn 下一步\n" + body + "\n```\n"
-
-
 def build_draft(data: dict, *, theme: str, template: str, style: str) -> str:
+    # 面板顺序就是阅读顺序。宽表格（分数、红线、逐题、动作、路线图、指标）各占 2 列，
+    # 剩下的窄栏留给"证据强度"这类单句提示。不再用「一、二、三」给面板编号——
+    # am 会自动给面板分配 A、B、C 字母，两套编号并排出现是重复（去 AI 味规则第 6 条）。
     panels = [
         header_panel(data),
         uncovered_panel(data),
         headline_panel(data),
-        dimensions_panel(data),
+        score_panel(data),
         redlines_panel(data),
         answers_panel(data),
         actions_panel(data),
         roadmap_panel(data),
         metrics_panel(data),
-        next_steps_panel(data),
     ]
     body = "\n".join(p for p in panels if p.strip())
     return frontmatter_block(data, theme, template, style) + "\n\n" + body.strip() + "\n"
