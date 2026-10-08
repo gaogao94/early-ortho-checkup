@@ -1,6 +1,8 @@
-# early-ortho-checkup · 早矫管理体检
+# 阻断性正畸管理指数（IOMI）· 早矫管理体检
 
-> 一个让 AI 智能体执行的**诊断问卷 skill**：用**一题一问**的方式访谈早矫（儿童青少年早期矫治）机构负责人，量化判断这家机构"早矫做得好不好、管得住管不住"，再按命中的缺口给出可执行的改进动作。
+> **Interceptive Orthodontic Management Index** — 一个让 AI 智能体执行的**诊断问卷 skill**：用**一题一问**的方式访谈早矫（儿童青少年早期矫治）机构负责人，量化判断这家机构"早矫做得好不好、管得住管不住"，再按命中的缺口给出可执行的改进动作。
+
+**关于名字**：早矫在正畸学术文献里的规范英文术语是 **interceptive orthodontics**（阻断性正畸），见美国国家医学图书馆的规范主题词表 [MeSH D009972](https://meshb.nlm.nih.gov/record/ui?ui=D009972 "Orthodontics, Interceptive")（树号 `E06.658.641`，与 `Orthodontics, Preventive`、`Orthodontics, Corrective` 并列）。日常也写作 `early orthodontic treatment`；美国正畸协会（AAO）的口径是 [Phase 1 treatment](https://aaoinfo.org/whats-trending/6-facts-about-two-phase-treatment/)。本仓库采用前者，因为它是索引与检索里的标准词。
 
 它的立场一句话：**看得见，才管得住。**
 
@@ -10,6 +12,12 @@
 - **前置要求**：不需要懂统计，不需要先上系统。答不出来本身就是重要信息。
 - **不做什么**：不诊断患者、不给临床建议、不做法律或会计意见。
 
+## 给其他 Agent 的一句话用法
+
+> 按 https://github.com/gaogao94/interceptive-ortho-management-index 里的 SKILL.md 给我做一次早矫管理体检，一题一问。
+
+（这句话可直接粘给 Claude Code、Codex 或任何能读网页/仓库的智能体。它自己会去取 `SKILL.md` 与 `reference/`。）
+
 ---
 
 ## 一次运行会发生什么
@@ -18,7 +26,7 @@
 |---|---|
 | 访谈 | 4 个维度、24 道题（A1–A6 / B1–B6 / C1–C6 / D1–D6），**助手一次只问一个问题** |
 | 时长 | 约 15–25 分钟，一题一答 |
-| 评分 | 每题 0 / 1 / 2 / 3 分；维度分 = 该维度 6 题之和 ÷ 18 × 100；总分 = 四个维度分的平均（均四舍五入取整） |
+| 评分 | 每题 0 / 1 / 2 / 3 分；维度满分 18（6 题 × 3 分）；总分 = 四个维度之和 ÷ 72 × 100 |
 | 定级 | L1 无标准 / L2 刚起步 / L3 有体系 / L4 能自转；**命中红线会降级封顶** |
 | 产出 | 一份《早矫管理体检报告》：等级、红线诊断、逐题证据、改进动作、90 天路线图、K1–K8 指标表 |
 | 呈现 | 同一份报告三种形态：**Markdown**（对话里直接读）、**shadcn 风格单页 HTML**（点开/转发/打印）、**PNG 图片**（发微信、贴 PPT） |
@@ -35,7 +43,7 @@
 - 每答完一题落一条账：`题号 | 你的原话关键点 | 判分 | 依据`；
 - 指标答不出来不扣人，但要如实记成"未知"，并写清这个数该从哪张报表取。
 
-如果你明确坚持"一次把 24 题发给我"，可以转入批量模式，但要先知道代价：诊断质量会明显下降（少了对每题的追问），报告里会标注"未逐题追问，证据强度较低"。默认仍然是一题一问。
+**这 24 题必须一次问完。** 没有"批量模式"——一次把 24 题发给受访者，得到的只会是敷衍的勾选，诊断质量会掉到没有意义的程度（少了逐题的追问）。答到一半要停也可以，前面的记录会保留，但报告要等 24 题答齐才出。
 
 ---
 
@@ -46,19 +54,20 @@
 把仓库放进 skills 目录：
 
 ```bash
-git clone https://github.com/gaogao94/early-ortho-checkup.git ~/.claude/skills/early-ortho-checkup
+git clone https://github.com/gaogao94/interceptive-ortho-management-index.git \
+  ~/.claude/skills/interceptive-ortho-management-index
 ```
 
 （已经下载过的话，直接把这个仓库目录拷进你的 skills 目录也可以。）然后用自然语言触发，例如：
 
 - "给我做一次早矫管理体检"
-- "用 early-ortho-checkup 看看我们门诊的早矫管理"
+- "用 interceptive-ortho-management-index 看看我们门诊的早矫管理"
 
 ### 场景 B：任意能读文件的 AI 助手
 
 把仓库里的 `SKILL.md` 与 `reference/` 目录一起交给它，然后说：
 
-> 按 SKILL.md 对我做早矫体检。
+> 按 SKILL.md 对我做早矫体检，一题一问。
 
 `reference/question-bank.md` 是唯一的提问来源，`reference/playbook.md` 是唯一的建议来源——两份都给它，否则报告会缺题或缺动作。
 
@@ -66,15 +75,17 @@ git clone https://github.com/gaogao94/early-ortho-checkup.git ~/.claude/skills/e
 
 | 文件 | 作用 |
 |---|---|
-| [`SKILL.md`](SKILL.md) | 主流程、一题一问循环、**评分规则**、报告模板、HTML 出页步骤 |
+| [`SKILL.md`](SKILL.md) | 主流程、一题一问循环、**评分规则**、红线判据、报告模板、HTML 出页步骤 |
 | [`reference/question-bank.md`](reference/question-bank.md) | **题库**：24 题的题干、探针意图、0/1/2/3 锚点 |
-| [`reference/playbook.md`](reference/playbook.md) | **改进手册**：ACT-1 – ACT-6 的落地动作 + 90 天路线图 |
-| [`reference/html-report.md`](reference/html-report.md) | **HTML 报告约定**：面板映射、组件语法、状态徽章、shadcn 主题 |
+| [`reference/playbook.md`](reference/playbook.md) | **改进手册**：六个动作（ACT-1 – ACT-6）的落地步骤 + 90 天路线图 |
+| [`reference/html-report.md`](reference/html-report.md) | **HTML 报告约定**：面板映射、组件语法、颜色约定、出图参数、实测坑位 |
+| [`reference/writing-style.md`](reference/writing-style.md) | **行文规范**：报告正文的去 AI 味规则、必改项、不得改写项 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 设计说明：为什么是这四个维度、为什么要设红线、已知局限 |
 | [`docs/example-run.md`](docs/example-run.md) | 一次完整运行的样例（也是本 skill 的自测样例）：一题一问片段、24 题判分账目、红线降级实算、动作优先序、K1–K8 的"未知即结论"处理；机构与数据全部虚构 |
 | [`tools/early_ortho_metrics.py`](tools/early_ortho_metrics.py) | 可选：拿一张脱敏 CSV 自查 K1–K8 里能算的部分 |
-| [`tools/render_report.py`](tools/render_report.py) | 把报告 JSON 渲染成 shadcn 风格单页 HTML（`--png` 同时出图） |
-| [`tools/html_to_image.mjs`](tools/html_to_image.mjs) | HTML → PNG：先测真实内容高度再截图，避免底部留大片空白 |
+| [`tools/render_report.py`](tools/render_report.py) | 把报告 JSON 渲染成 shadcn 风格单页 HTML（`--png` 同时出图；24 题缺一题会拒绝生成） |
+| [`tools/html_to_image.mjs`](tools/html_to_image.mjs) | HTML → PNG：先测真实内容高度再截图，避免底部留大片空白；默认 CSS 视口 990px / 2 倍图 |
+| [`tools/check_writing_style.py`](tools/check_writing_style.py) | 报告的文案自检（冒号提示语、序数小标题、空话开头等 10 类可机检问题） |
 
 ### HTML 报告依赖
 
@@ -96,7 +107,7 @@ python tools/render_report.py report.json --png --am "$AM_CLI"
 
 > **用户**：我们是××口腔门诊，3 名正畸医生，想做一次早矫管理的体检。
 >
-> **助手**：好。这是一次机构管理体检，大概 15–25 分钟，一共 24 个问题，我一次只问一个，你按实际情况答就行；查不到或者不确定，直接说"查不到"，这本身就是我要记录的信息。第一个问题：你们现在在册的早矫病例一共多少例？其中有多少例已经超过了当初计划的结束时间？
+> **助手**：好。这是一次机构管理体检，大概 15–25 分钟，一共 24 个问题，我一次只问一个，你按实际情况答就行；查不到或者不确定，直接说"不知道"——那也是答案。第一个问题：你们现在在册的早矫病例一共多少例？其中有多少例已经超过了当初计划的结束时间？
 >
 > **用户**：在册大概一百多例吧，具体数得让医助去数。超期多少……没统计过。
 >
@@ -204,16 +215,21 @@ python tools/early_ortho_metrics.py --csv 导出.csv \
 ## 仓库结构
 
 ```
-early-ortho-checkup/
+interceptive-ortho-management-index/
 ├── README.md                        # 本文件
-├── LICENSE                          # MIT
-├── .gitignore                       # 缓存与本地数据文件不入库
-├── SKILL.md                         # 主流程 + 一题一问循环 + 评分规则
+├── LICENSE                          # CC BY-NC-ND 4.0（署名 + 禁商用 + 禁止演绎）
+├── .gitignore                       # 缓存、本地数据与生成的报告不入库
+├── SKILL.md                         # 主流程 + 一题一问循环 + 评分规则 + 红线判据
 ├── reference/
 │   ├── question-bank.md             # 24 题：题干 + 探针意图 + 0/1/2/3 锚点
-│   └── playbook.md                  # ACT-1..ACT-6 落地动作 + 90 天路线图
+│   ├── playbook.md                  # ACT-1..ACT-6 落地动作 + 90 天路线图
+│   ├── html-report.md               # HTML 报告约定、出图参数、实测坑位
+│   └── writing-style.md             # 报告行文规范（去 AI 味）
 ├── tools/
-│   └── early_ortho_metrics.py       # 可选数据自查（脱敏 CSV 计算 K1–K8）
+│   ├── early_ortho_metrics.py       # 可选数据自查（脱敏 CSV 计算 K1–K8）
+│   ├── render_report.py             # report.json → 单页 HTML / PNG
+│   ├── html_to_image.mjs            # HTML → PNG（先测高度再截图）
+│   └── check_writing_style.py       # 报告文案自检
 └── docs/
     ├── DESIGN.md                    # 设计说明与已知局限
     └── example-run.md               # 一次完整运行的样例（虚构数据）
@@ -221,9 +237,18 @@ early-ortho-checkup/
 
 ---
 
-## 改这个 skill 的时候
+## 关于这个 skill 的维护
 
-如果你要动题库、评分或建议，先看一眼 [`docs/DESIGN.md`](docs/DESIGN.md) 的「维护约定」。三条最容易踩的：
+本仓库由作者维护，**修改由作者统一发布**。这不是不欢迎反馈——发现错误、有改进
+想法、想补一个维度或调整判据，都欢迎开 issue 说明，作者会看、会回，采纳后由作者
+改到仓库里。这样做的目的是让公开版本只有一个权威来源：使用者拿到的永远是一致的
+题库与判据，不会因为版本分叉而算出两套分数。
+
+这也是本仓库采用 CC BY-NC-ND 而不是 MIT 的原因：**CC BY-NC-ND 让"公开可读可用"、
+"不允许分叉出改版"、"不允许拿它对外收费"这三件事同时成立**，而 MIT 允许任何人发布
+一个改了判据的副本，也允许把它打包成收费产品。
+
+作者改的时候，有三条最容易踩：
 
 1. **编号是契约**：四维度、L1–L4、R1–R4、ACT-1–ACT-6、K1–K8 的名称与编号在仓库内唯一。改一处，`SKILL.md`、`reference/`、`docs/`、README 要同步。
 2. **判据与题号必须对得上**：每个 ACT 的"什么时候算做到"里用到的题号，必须出现在该 ACT 的覆盖列表里；六个动作的覆盖题号并集必须恰好是 24 题。
@@ -241,6 +266,32 @@ early-ortho-checkup/
 - **结论以自述为依据**：报告中的每条判断都回指"题号 + 你的原话"，助手不替受访者脑补；这些自述未经核验，工具也无法验证数据真实性。
 - **不含真实数据**：仓库内所有示例（含示例对话与样例 CSV）均为虚构。请勿把真实患者或机构内部数据放进本仓库。
 
+---
+
+## 如何引用本仓库
+
+转载、引用、分发时请保留署名并注明来源：
+
+> 阻断性正畸管理指数（IOMI），作者 gaogao94，
+> 采用 CC BY-NC-ND 4.0 许可，来源：https://github.com/gaogao94/interceptive-ortho-management-index
+
+英文：
+
+> Interceptive Orthodontic Management Index (IOMI) by gaogao94,
+> licensed under CC BY-NC-ND 4.0.
+> Source: https://github.com/gaogao94/interceptive-ortho-management-index
+
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。
+**CC BY-NC-ND 4.0**（署名 — 非商业性使用 — 禁止演绎 4.0 国际），见 [LICENSE](LICENSE)。
+
+一句话说明你能做什么：
+
+- ✅ **随便用**：个人、门诊内部使用都可以，不收费、不用事先问。
+- ✅ **原样转发**：保留署名与许可说明，给出仓库地址即可。
+- ✅ **格式转换**：导出 PDF / 图片、放进 skill 目录，都算技术性调整，不算"演绎"。
+- ❌ **不要拿它对外卖钱**：不能做成付费产品、付费课程，也不能以"提供早矫管理体检"为名对外收费。
+- ❌ **不要分发改过的版本**：自己改来用可以，但改完的题库、判据、文档不要对外发布。
+
+用本工具生成的**报告**（你的机构名、访谈记录、分数、结论）归你所有，不受本许可限制。
+真要把它作为对外服务售卖，请先联系作者取得授权。

@@ -1,4 +1,4 @@
-# 设计说明 · early-ortho-checkup
+# 设计说明 · interceptive-ortho-management-index
 
 这份文档回答一个问题：**为什么这个 skill 长成现在这样。**
 

@@ -1,9 +1,9 @@
 ---
-name: early-ortho-checkup
+name: interceptive-ortho-management-index
 description: 早矫体检：用一题一问的访谈诊断一家口腔机构的儿童早期矫治业务与管理水平，给出分级结论和改进建议。触发场景：想评估自家门诊的早矫做得怎么样/管理得怎么样/风险有多大、怀疑早矫病例拖期或结不了案、早矫预收款与提成怎么管、要一份早矫管理自查报告、或想做 90 天复测对比。输出《早矫管理体检报告》。
 ---
 
-# 早矫体检（early-ortho-checkup）
+# 早矫体检（interceptive-ortho-management-index）
 
 用 **24 道题、一题一问**，访谈早矫机构的负责人或门诊管理者，评定该机构早矫业务的管理成熟度，并输出针对性的改进方案。来源文章见 `docs/DESIGN.md`；一次完整的运行样例（判分账目、红线降级实算、报告全文，全部虚构）见 `docs/example-run.md`；HTML 报告的组件与版式约定见 `reference/html-report.md`。
 

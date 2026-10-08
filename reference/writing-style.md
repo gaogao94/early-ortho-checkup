@@ -1,6 +1,6 @@
 # 报告文案规范：去 AI 味 + 可读性
 
-> **适用对象**：`early-ortho-checkup` 的报告成稿（Markdown 报告、HTML 页面、PNG 图片三份内容一致）。
+> **适用对象**：`interceptive-ortho-management-index` 的报告成稿（Markdown 报告、HTML 页面、PNG 图片三份内容一致）。
 > **规则来源**：用户私有 skill `gaogao94/lieflat-less-ai-tone` 的 `SKILL.md`（453 行；本次以下载到 `%TEMP%\lessaitone_fetch\SKILL.md` 的版本为准，SHA256 前缀 `1DB087D4DB618CF6`）。本文只转述规则要点与触发标记，不复制其全文。
 > **证据基准**（2026-10-08）：
 > - 旧稿 = 用户看到的那一版 `_e2e_output/case1_kangqiao_L1.draft.md`（SHA256 前缀 `095B3C9005DFCD79`，2957 汉字）
