@@ -347,13 +347,15 @@ def capsule_ids(text: str) -> str:
     """把一句话里裸写的题号（A1、B4、D2…）逐个换成胶囊。
 
     报告里常有一句"重点对比题号 A1 A2 A4 A5 B1 B4 B5 D2 D4"，
-    九个短码连在一起就是一片字母噪声。换成胶囊之后能一眼数出几个。"""
+    九个短码连在一起就是一片字母噪声。换成胶囊之后能一眼数出几个。
+    题号保留 A1 原样，不改写成 1-1——带维度字母读者才知道它属于哪一块。"""
     import re as _re
 
-    def repl(m):
-        return capsule(short_id(m.group(0)))
-
-    return _re.sub(r"\b[ABCD][0-9]{1,2}\b", repl, text)
+    return _re.sub(
+        r"\b[ABCD][0-9]{1,2}\b",
+        lambda m: capsule(m.group(0)),
+        text,
+    )
 
 
 def short_id(qid: str) -> str:
@@ -423,15 +425,42 @@ _C_WARN = "#d97706"
 _C_OK = "#16a34a"
 
 
+#: 档位标签的配色。用 tag 的形状（带底色的圆角块）而不是纯文字，
+#: 一眼分出"哪几件先做"。
+_TIER_TAG = {
+    "P0": ("#fef2f2", "#dc2626", "先做"),
+    "P1": ("#fffbeb", "#d97706", "接着做"),
+    "P2": ("#f4f4f5", "#71717a", "以后做"),
+}
+
+
+def tier_tag(tier: str) -> str:
+    """档位做成 tag。比 P0/P1/P2 好懂，也比纯灰字醒目。"""
+    bg, fg, label = _TIER_TAG.get(tier, ("#f4f4f5", "#71717a", tier))
+    return (
+        f'<span style="display:inline-block;padding:2px 10px;margin-left:10px;'
+        f'border-radius:6px;background:{bg};color:{fg};font-size:12px;font-weight:700;'
+        f'vertical-align:2px">{label}</span>'
+    )
+
+
 def capsule(text: str, tone: str = "plain") -> str:
-    """把题号、指标号这类短码做成胶囊，别让它混在正文里当普通文字读。"""
-    color = {"plain": _C_DIM, "accent": _C_ACCENT, "err": _C_ERR, "warn": _C_WARN}.get(tone, _C_DIM)
+    """把题号、指标号这类短码做成 tag，别让它混在正文里当普通文字读。
+
+    用正文字体，不用等宽字体：等宽体在中文报告里显得像代码，
+    而且"指标2"这种中文标签在等宽体下字形是外挂的。
+    """
+    bg, fg = {
+        "plain": (_C_FILL, _C_DIM),
+        "accent": ("#eff6ff", _C_ACCENT),
+        "err": ("#fef2f2", _C_ERR),
+        "warn": ("#fffbeb", _C_WARN),
+    }.get(tone, (_C_FILL, _C_DIM))
     body = single_line(text)
     return (
         '<span style="display:inline-block;padding:1px 8px;margin:0 2px;'
-        f'border:1px solid {_C_LINE};border-radius:999px;background:{_C_FILL};'
-        f'color:{color};font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
-        f'white-space:nowrap">{body}</span>'
+        f'border-radius:6px;background:{bg};color:{fg};'
+        f'font-size:12px;font-weight:600;white-space:nowrap">{body}</span>'
     )
 
 
@@ -466,10 +495,7 @@ def pct(part: int, whole: int) -> int:
 def frontmatter_block(data: dict, theme: str, template: str, style: str) -> str:
     headline = data["headline"]
     title = f"{single_line(data['org'])} · 早矫管理体检报告"
-    subtitle = (
-        f"{single_line(data['date'])} · {headline['level']} {single_line(headline['level_name'])}"
-        f" · 总分 {int(headline['raw_score'])}/100"
-    )
+    subtitle = f"{single_line(data['date'])}"
     # 自定义键只用 ASCII：am 的 frontmatter 解析对非 ASCII 键不友好。
     # style 不写在这里——它已经由 --style 传给 am，写两处只会互相打架。
     lines = [
@@ -523,10 +549,9 @@ def headline_panel(data: dict) -> str:
         "## 结论",
         "",
         # 大字给等级，后面跟总分。读者第一眼要看到的是"我站在哪一档"。
+        # 等级下面不再放 summary：那句话在下面的面板里都有，重复一遍只是占高度。
         big(level, 64) + "&nbsp;&nbsp;" + big(level_name, 26, _C_DIM)
         + "&nbsp;&nbsp;" + small(f"{score} 分", 20),
-        "",
-        one_line(h["summary"]),
         "",
     ]
 
@@ -580,21 +605,25 @@ def level_gauge(current: str, score: int) -> str:
 def dim_bar(dim: dict) -> str:
     """一行一个维度：竖杠 + 编号名 + 得分 + 一句话缺口。
 
-    原来得分放大成 40px、缺口另起一行，四个维度就吃掉半屏。现在横排成一行，
-    说明文字跟在分数后面：省高度，也更像一张表。
-    维度名前面用竖杠而不是胶囊——胶囊四五个排在一起像一排按钮，读不出是并列的维度。
+    第 2 次改法的两个毛病都修掉了：
+    - 竖杠原来撑满整行（比字高出一大截），现在 inline-block 加 padding，
+      高度跟着文字走；
+    - 得分和 /18 原来被 min-width 撑开，看起来是跟标题挤在一起。
+
+    维度名前面用竖杠而不是胶囊——四五个胶囊排在一起像一排按钮，
+    读不出它们是并列的维度。
     """
     order = "ABCD".index(dim["id"]) + 1 if dim["id"] in "ABCD" else dim["id"]
     raw_dim = round(int(dim["score"]) * 0.18)
     gap = one_line(dim.get("gap") or dim.get("desc") or "")
-    bar = f"border-left:3px solid {_C_ACCENT};padding-left:10px;display:block;margin:7px 0"
-    head = (
-        f'<span style="display:inline-block;min-width:104px;font-weight:700">'
-        f"维度{order}｜{one_line(dim['name'])}</span>"
+    bar = (
+        f"display:inline-block;border-left:3px solid {_C_ACCENT};"
+        f"padding:2px 0 2px 10px;margin:5px 0"
     )
+    head = f'<span style="font-weight:700">维度{order}｜{one_line(dim["name"])}</span>'
     tail = (
-        f'<span style="display:inline-block;min-width:34px;font-size:19px;'
-        f'font-weight:800;color:{_C_ACCENT}">{raw_dim}</span>'
+        f'<span style="font-size:19px;font-weight:800;color:{_C_ACCENT};'
+        f'padding:0 6px 0 12px">{raw_dim}</span>'
         f'<span style="font-size:12px;color:{_C_DIM}">/18　</span>'
     )
     return f'<span style="{bar}">{head}{tail}{gap}</span>'
@@ -629,11 +658,17 @@ def redlines_panel(data: dict) -> str:
         "|---|---|---|",
     ]
     for red in data["redlines"]:
-        lines.append(
-            f"| {cell(red['name'])} "
-            f"| {cell(red['verdict'])} "
-            f"| {cell(compact_basis(red['basis']))} |"
-        )
+        # 命中的整条标红：四条里哪几条出问题，应该一眼扫到，不用逐个读"命中"两个字
+        if red["verdict"] == "命中":
+            name = f'<span style="color:{_C_ERR};font-weight:700">{one_line(red["name"])}</span>'
+            verdict = f'<span style="color:{_C_ERR};font-weight:700">{one_line(red["verdict"])}</span>'
+        elif red["verdict"] == "信息不足":
+            name = f'<span style="color:{_C_WARN}">{one_line(red["name"])}</span>'
+            verdict = f'<span style="color:{_C_WARN}">{one_line(red["verdict"])}</span>'
+        else:
+            name = cell(red["name"])
+            verdict = cell(red["verdict"])
+        lines.append(f"| {name} | {verdict} | {cell(compact_basis(red['basis']))} |")
     return "\n".join(lines) + "\n"
 
 
@@ -737,14 +772,13 @@ def actions_panel(data: dict) -> str:
         ]
 
     for i, act in enumerate(actions, start=1):
-        # 全角空格撑开单元格，否则"得分"这种两字表头会挤在一起
         if i > 1:
             out += ["---", ""]
         title = one_line(act.get("title") or act["name"])
-        # 档位写成"先做/接着做/以后做"，比 P0/P1/P2 好懂；后面留足间距，别贴着标题
-        when = {"P0": "先做", "P1": "接着做", "P2": "以后做"}.get(act["tier"], act["tier"])
+        # 档位做成 tag：先做 / 接着做 / 以后做。比 P0/P1/P2 好懂，
+        # 也比一行灰字醒目——六个动作里哪几件先做，一眼能分出来。
         out += [
-            f"### {i}. {title}　　{small(when, 13)}",
+            f"### {i}. {title}{tier_tag(act['tier'])}",
             "",
             one_line(act["now"]),
             "",
@@ -784,24 +818,16 @@ def metrics_panel(data: dict) -> str:
         "| 指标 | 数值 | 从哪来 |",
         "|---|---|---|",
     ]
-    unknown_count = 0
     for metric in data["metrics"]:
         # 不放 ok / warn：am 会把它们换成 ✓ / ! 徽章，而读者要的是数字本身。
         value = cell(metric["value"])
         if is_unknown(metric["value"]):
-            unknown_count += 1
             value = small("还不知道", 13, _C_WARN)
         lines.append(
             f"| {capsule(plain_id(metric['id']))} {cell(plain_name(metric['name']))} "
             f"| {value} | {cell(metric['note'])} |"
         )
-    total = len(data["metrics"])
-    lines += ["", f"> 八个数字里，{total - unknown_count} 个拿到了，{unknown_count} 个还不知道。"]
-
-    if unknown_count:
-        lines.append(
-            "> 每个「还不知道」都写清了该去哪张报表取数。不估算，也不用行业均值顶替。"
-        )
+    # 表下不再加解释：哪几个"还不知道"表里一眼看得到，取证方式就在右边那一列。
     return "\n".join(lines) + "\n"
 
 
